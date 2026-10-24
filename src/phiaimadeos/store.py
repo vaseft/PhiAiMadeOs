@@ -65,6 +65,29 @@ class Store:
             raise KeyError(f"找不到 {kind}: {record_id}")
         return json.loads(row[0])
 
+    def revise_import(self, chart_id, expected, changes, candidate=None):
+        """CAS an imported record and its optional new immutable-content version."""
+        timestamp = now()
+        with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT payload,immutable FROM records WHERE kind='charts' AND id=?", (chart_id,)).fetchone()
+            if row is None or row["immutable"]:
+                raise ValueError("导入记录不存在或不可修改")
+            value = json.loads(row["payload"])
+            if any(value.get(key) != item for key, item in expected.items()):
+                raise ValueError("素材标签或版本已变化，拒绝覆盖，请刷新后重试")
+            if set(changes) & {"id", "created_at", "original_path", "original_sha256", "source_archive_sha256"}:
+                raise ValueError("补处理不能更改原件身份")
+            if candidate:
+                candidate = {**candidate, "created_at": timestamp, "updated_at": timestamp}
+                db.execute("INSERT INTO records VALUES (?,?,?,?,?,?)", ("candidates", candidate["id"], self.encode(candidate), 0, timestamp, timestamp))
+            value.update(changes)
+            value["updated_at"] = timestamp
+            db.execute("UPDATE records SET payload=?,updated_at=? WHERE kind='charts' AND id=?", (self.encode(value), timestamp, chart_id))
+            db.execute("INSERT INTO events VALUES (?,?,?,?,?)", (new_id(), timestamp, "library.reprocessed", chart_id,
+                self.encode({"candidate_id": candidate["id"] if candidate else None, "import_status": value["import_status"], "run_id": changes.get("reprocess_run_id")})))
+        return value
+
     def list(self, kind):
         with self.connection() as db:
             rows = db.execute("SELECT payload FROM records WHERE kind=? ORDER BY created_at DESC", (kind,)).fetchall()

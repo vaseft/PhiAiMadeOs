@@ -22,6 +22,8 @@ import uuid
 from .models import ARCH_VERSION, MAX_LINES, MOTION_DICTIONARY_VERSION, POSITION_X_SCALE, ModelError, build_model, model_config, set_motion_dictionary
 from ._model_data import (SongCache, batch_for, build_windows, canonical_hash, fit_motion_dictionary,
                           file_hash, read_manifest, relative_path, safe_path)
+from ._training_batch import (EXECUTION_VERSION, batch_executor, loss_rows, prepare_batch,
+                              prepared_chunks, transfer_batch, window_chunks)
 
 STAGES = ("note_rhythm", "line_motion", "placement")
 
@@ -180,7 +182,7 @@ def _masked_mean(value, mask):
     return (value * mask).sum() / mask.expand_as(value).sum().clamp_min(1)
 
 
-def _loss(stage, prediction, target, common, song, torch):
+def _loss(stage, prediction, target, common, song, torch, *, synchronize=True):
     import torch.nn.functional as F
     # Losses are evaluated in fp32 even under autocast.
     prediction = {k: v.float() for k, v in prediction.items()}
@@ -222,9 +224,12 @@ def _loss(stage, prediction, target, common, song, torch):
             for field in ("x", "y_offset"):
                 parts[field] = _masked_mean(F.smooth_l1_loss(prediction[field], target[field], reduction="none"), valid)
             parts["speed"] = _masked_mean(F.smooth_l1_loss(torch.log1p(prediction["speed"]), torch.log1p(target["speed"]), reduction="none"), valid)
-        if valid.any() and common["queries"].shape[1] > 1:
+        if common["queries"].shape[1] > 1:
             times = common["queries"][0, :, 0]
-            simultaneous = (times[:, None] - times[None, :]).abs() < (0.03 / (math.expm1(float(common["queries"][0, 0, 14])) or 1))
+            width = common.get("width_s")
+            if width is None:
+                width = math.expm1(float(common["queries"][0, 0, 14]))
+            simultaneous = (times[:, None] - times[None, :]).abs() < (0.03 / (width or 1))
             simultaneous = simultaneous.triu(1)
             if pure:
                 probability = prediction["lane"].softmax(-1)[0]
@@ -235,9 +240,9 @@ def _loss(stage, prediction, target, common, song, torch):
                 collision = F.relu(24.0 / POSITION_X_SCALE - (x[:, None] - x[None, :]).abs()) * (probability @ probability.T)
             parts["overlap"] = _masked_mean(collision, simultaneous) * 0.1
     total = sum(parts.values())
-    if not bool(torch.isfinite(total)):
+    if synchronize and not bool(torch.isfinite(total)):
         raise ModelError("NONFINITE_LOSS", "训练损失出现 NaN/Inf，拒绝更新参数。")
-    return total, {k: float(v.detach()) for k, v in parts.items()}
+    return total, {k: float(v.detach()) if synchronize else v.detach() for k, v in parts.items()}
 
 
 def _training_dir(root):
@@ -270,6 +275,11 @@ def run_training(request: dict, project_root, progress=None) -> dict:
     epochs, accumulation, seed = int(request.get("epochs", 10)), int(request.get("grad_accum", 16)), int(request.get("seed", 42))
     if not 1 <= epochs <= 10000 or not 1 <= accumulation <= 256 or not 0 <= seed < 2 ** 32:
         raise ModelError("INVALID_TRAIN_CONFIG", "epoch、梯度累积或随机种子超出允许范围。")
+    microbatch = request.get("microbatch", 1)
+    prefetch_batches = request.get("prefetch_batches", 0)
+    if type(microbatch) is not int or microbatch not in (1, 2, 4, 8, 16) or type(prefetch_batches) is not int or prefetch_batches not in (0, 1):
+        raise ModelError("INVALID_TRAIN_CONFIG", "并行窗口数须为1/2/4/8/16，预取批次数须为0或1。")
+    effective_batch = microbatch * accumulation
     manifest_path = safe_path(root, request.get("manifest_path"))
     manifest, samples = read_manifest(manifest_path, root)
     max_lines = request.get("max_lines", MAX_LINES)
@@ -282,7 +292,8 @@ def run_training(request: dict, project_root, progress=None) -> dict:
             if sum(item["notes"] for item in window_report if item["split"] == split) == 0:
                 raise ModelError("NOTE_TARGETS_MISSING", f"{split} 没有非零真实音符标签，不能登记为有效音符模型训练。")
     manifest_sha = file_hash(manifest_path)
-    config = {"epochs": epochs, "seed": seed, "grad_accum": accumulation, "microbatch": 1, "stage": stage,
+    config = {"epochs": epochs, "seed": seed, "grad_accum": accumulation, "microbatch": microbatch, "stage": stage,
+              "effective_batch_windows": effective_batch, "prefetch_batches": prefetch_batches, "execution_version": EXECUTION_VERSION,
               "learning_rate": 0.0002, "weight_decay": 0.01, "gradient_clip": 1.0, "warmup_ratio": 0.05,
               "scheduler": "warmup_cosine", "checkpoint_optimizer_steps": 50,
               "loss_version": "masked-focal-ce-huber-easing-geometry-v2", "window_index_version": "adaptive-audio-domain-384-192-lines-v2",
@@ -323,7 +334,7 @@ def run_training(request: dict, project_root, progress=None) -> dict:
     amp_enabled = device.type == "cuda"
     environment = _environment(torch, device, root)
     environment["source_sha256"] = {name: file_hash(Path(__file__).with_name(name))
-                                     for name in ("models.py", "_model_data.py", "training.py", "inference.py", "formats.py", "audio.py")}
+                                     for name in ("models.py", "_model_data.py", "_training_batch.py", "training.py", "inference.py", "formats.py", "audio.py")}
     config["device"] = str(device)
     config["precision"] = "bf16" if amp_enabled and amp_dtype == torch.bfloat16 else "fp16" if amp_enabled else "fp32"
     config_sha = canonical_hash(config)
@@ -342,9 +353,14 @@ def run_training(request: dict, project_root, progress=None) -> dict:
             raise ModelError("RESUME_UNAVAILABLE", "该训练运行没有可恢复的元数据。")
         record = json.loads(run_path.read_text(encoding="utf-8"))
         old_config = record.get("config", {})
-        if ({k: v for k, v in old_config.items() if k != "epochs"} != {k: v for k, v in config.items() if k != "epochs"}
+        runtime_fields = {"epochs", "microbatch", "grad_accum", "effective_batch_windows", "prefetch_batches", "execution_version"}
+        old_effective = old_config.get("microbatch", 1) * old_config.get("grad_accum", 16)
+        batch_changed = (old_config.get("microbatch", 1), old_config.get("grad_accum", 16)) != (microbatch, accumulation)
+        if (batch_changed and (request.get("allow_runtime_batch_change") is not True or old_effective != effective_batch)):
+            raise ModelError("RESUME_CONTRACT_MISMATCH", "续训调批量需显式启用运行批量调整，且每次更新的有效窗口数保持不变。")
+        if ({k: v for k, v in old_config.items() if k not in runtime_fields} != {k: v for k, v in config.items() if k not in runtime_fields}
                 or epochs < old_config.get("epochs", epochs)):
-            raise ModelError("RESUME_CONTRACT_MISMATCH", "恢复仅允许增加 epochs，其他训练配置必须保持一致。")
+            raise ModelError("RESUME_CONTRACT_MISMATCH", "恢复只允许增加epochs和保持有效批量的运行参数调整，其他配置必须一致。")
         extend_completed = epochs > old_config["epochs"]
         accepted_config_hashes.add(record["train_config_sha256"])
         for item in record.get("resume_history", []):
@@ -354,7 +370,8 @@ def run_training(request: dict, project_root, progress=None) -> dict:
             if record.get(key) != expected:
                 raise ModelError("RESUME_CONTRACT_MISMATCH", "恢复配置、数据或拆分与断点不一致。", field=key)
         record.setdefault("resume_history", []).append({"created_at": _now(), "environment": environment,
-                     "previous_config": old_config, "previous_train_config_sha256": record["train_config_sha256"]})
+                     "previous_config": old_config, "previous_train_config_sha256": record["train_config_sha256"],
+                     "runtime_batch_changed": batch_changed, "effective_batch_preserved": old_effective == effective_batch})
         record.update(config=config, train_config_sha256=config_sha)
     else:
         run_dir.mkdir(parents=True, exist_ok=False)
@@ -399,7 +416,7 @@ def run_training(request: dict, project_root, progress=None) -> dict:
                 set_motion_dictionary(model, motion_dictionary)
             optimizer = torch.optim.AdamW(model.parameters(), lr=config["learning_rate"], weight_decay=config["weight_decay"], foreach=False)
             train_indices, val_indices = stage_windows[name]["train"], stage_windows[name]["val"]
-            steps_per_epoch = math.ceil(len(train_indices) / accumulation)
+            steps_per_epoch = math.ceil(len(train_indices) / effective_batch)
             total_steps, warmup = steps_per_epoch * epochs, max(1, math.ceil(steps_per_epoch * epochs * 0.05))
             def schedule(step):
                 if step < warmup:
@@ -462,6 +479,12 @@ def run_training(request: dict, project_root, progress=None) -> dict:
             if not previous.get("resume_checkpoint_path"):
                 save_resume(0, 0, None)
 
+            def prepare_chunk(indices):
+                song = cache.get(windows[indices[0]].sample_index)
+                if motion_dictionary is not None:
+                    song["motion_dictionary"] = motion_dictionary
+                return prepare_batch(name, song, [windows[i] for i in indices], pin=device.type == "cuda" and bool(prefetch_batches))
+
             for epoch in range(start_epoch, epochs):
                 started = time.monotonic()
                 if order is None:
@@ -479,22 +502,29 @@ def run_training(request: dict, project_root, progress=None) -> dict:
                 epoch_loss, epoch_windows = 0.0, 0
                 while cursor < len(order):
                     optimizer.zero_grad(set_to_none=True)
-                    group_size = min(accumulation, len(order) - cursor)
-                    group_loss, components = 0.0, defaultdict(float)
-                    for offset in range(group_size):
-                        window = windows[order[cursor + offset]]
-                        song = cache.get(window.sample_index)
-                        if motion_dictionary is not None:
-                            song["motion_dictionary"] = motion_dictionary
-                        common, target = batch_for(name, song, window, device)
-                        with torch.autocast(device_type=device.type, dtype=amp_dtype, enabled=amp_enabled):
-                            prediction = model(**common)
-                        loss, parts = _loss(name, prediction, target, common, song, torch)
-                        scaler.scale(loss / group_size).backward()
-                        group_loss += float(loss.detach())
-                        for key, value in parts.items():
-                            components[key] += value
-                        del loss, prediction, common, target
+                    group_size = min(effective_batch, len(order) - cursor)
+                    group_loss_tensor, components = torch.zeros((), device=device), {}
+                    chunks = window_chunks(order[cursor:cursor + group_size], windows, microbatch)
+                    actual_batches = []
+                    with batch_executor(bool(prefetch_batches)) as executor:
+                        for indices, prepared in prepared_chunks(chunks, prepare_chunk, executor):
+                            window = windows[indices[0]]
+                            batch = transfer_batch(prepared, device)
+                            with torch.autocast(device_type=device.type, dtype=amp_dtype, enabled=amp_enabled):
+                                prediction = model(**batch["common"])
+                            losses, parts = loss_rows(name, prediction, batch, _loss, torch)
+                            total = losses.sum()
+                            if not bool(torch.isfinite(total)):
+                                raise ModelError("NONFINITE_LOSS", "批次损失出现NaN/Inf，拒绝更新参数。")
+                            scaler.scale(total / group_size).backward()
+                            group_loss_tensor += total.detach()
+                            for row in parts:
+                                for key, value in row.items():
+                                    components[key] = components.get(key, 0) + value
+                            actual_batches.append(len(indices))
+                            del total, losses, parts, prediction, batch, prepared
+                    group_loss = float(group_loss_tensor)
+                    components = {key: float(value) for key, value in components.items()}
                     scaler.unscale_(optimizer)
                     grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), config["gradient_clip"], error_if_nonfinite=True)
                     if not torch.isfinite(grad_norm):
@@ -508,7 +538,8 @@ def run_training(request: dict, project_root, progress=None) -> dict:
                     epoch_windows += group_size
                     resources = _resources(torch, device)
                     _append_log(log_path, {"phase": "train", "stage": name, "epoch": epoch + 1, "optimizer_step": optimizer_step,
-                                "microbatch": 1, "accumulated_windows": group_size, "loss": group_loss / group_size,
+                                "microbatch": microbatch, "actual_microbatch_sizes": actual_batches,
+                                "effective_batch_windows": effective_batch, "accumulated_windows": group_size, "loss": group_loss / group_size,
                                 "loss_components": {k: v / group_size for k, v in components.items()}, "lr": optimizer.param_groups[0]["lr"],
                                 "grad_norm_before_clip": float(grad_norm), "resources": resources})
                     _enforce_budget(resources)
@@ -520,21 +551,20 @@ def run_training(request: dict, project_root, progress=None) -> dict:
                 model.eval()
                 val_groups = defaultdict(list)
                 val_parts = defaultdict(list)
-                with torch.inference_mode():
-                    for index in val_indices:
-                        window = windows[index]
-                        song = cache.get(window.sample_index)
-                        if motion_dictionary is not None:
-                            song["motion_dictionary"] = motion_dictionary
-                        common, target = batch_for(name, song, window, device)
+                with torch.inference_mode(), batch_executor(bool(prefetch_batches)) as executor:
+                    for indices, prepared in prepared_chunks(window_chunks(val_indices, windows, microbatch), prepare_chunk, executor):
+                        batch = transfer_batch(prepared, device)
                         with torch.autocast(device_type=device.type, dtype=amp_dtype, enabled=amp_enabled):
-                            prediction = model(**common)
-                        loss, parts = _loss(name, prediction, target, common, song, torch)
-                        group = samples[window.sample_index]["group_id"]
-                        val_groups[group].append(float(loss))
-                        for key, value in parts.items():
-                            val_parts[key].append(value)
-                        del prediction, loss, common, target
+                            prediction = model(**batch["common"])
+                        losses, parts = loss_rows(name, prediction, batch, _loss, torch)
+                        values = losses.cpu().tolist()
+                        if not all(math.isfinite(value) for value in values):
+                            raise ModelError("NONFINITE_LOSS", "验证损失出现NaN/Inf，拒绝登记模型。")
+                        for index, value in zip(indices, values):
+                            val_groups[samples[windows[index].sample_index]["group_id"]].append(value)
+                        for key in {key for row in parts for key in row}:
+                            val_parts[key].extend(torch.stack([row[key] for row in parts if key in row]).cpu().tolist())
+                        del prediction, losses, parts, batch, prepared
                 by_group = {group: sum(values) / len(values) for group, values in val_groups.items()}
                 val_loss = sum(by_group.values()) / len(by_group)
                 metrics = {"phase": "validation", "stage": name, "epoch": epoch + 1, "optimizer_step": optimizer_step,

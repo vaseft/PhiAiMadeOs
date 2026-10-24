@@ -211,7 +211,7 @@ def _load_classes():
             self.register_buffer("prototype_centers", torch.zeros(64, 2))
             self.register_buffer("prototype_properties", torch.full((64,), -1, dtype=torch.long))
 
-        def forward(self, features, conditions, queries, notes, audio_mask=None):
+        def forward(self, features, conditions, queries, notes, audio_mask=None, notes_mask=None):
             memory, mask = self.audio(features, conditions, audio_mask)
             summary = memory[:, 0]
             parent_condition = self.parent_condition(summary)
@@ -221,8 +221,11 @@ def _load_classes():
             invalid = torch.arange(self.max_lines + 1, device=summary.device)[None, :] > torch.arange(self.max_lines, device=summary.device)[:, None]
             parents = parents.masked_fill(invalid[None], -1e4)
             memory = torch.cat((memory, self.notes(notes)), dim=1)
-            if mask is not None:
-                mask = torch.cat((mask, torch.zeros(notes.shape[:2], dtype=torch.bool, device=notes.device)), dim=1)
+            if mask is not None or notes_mask is not None:
+                if mask is None:
+                    mask = torch.zeros(memory.shape[0], memory.shape[1] - notes.shape[1], dtype=torch.bool, device=notes.device)
+                note_padding = notes_mask if notes_mask is not None else torch.zeros(notes.shape[:2], dtype=torch.bool, device=notes.device)
+                mask = torch.cat((mask, note_padding), dim=1)
             h = self.events(queries, memory, mask)
             p = self.params(h)
             if not bool((self.prototype_properties >= 0).any()):
@@ -251,12 +254,15 @@ def _load_classes():
             self.extra = nn.Linear(192, 2)
             self.lanes = KLanePlacementHead()
 
-        def forward(self, features, conditions, queries, lines, key_count=6, audio_mask=None):
+        def forward(self, features, conditions, queries, lines, key_count=6, audio_mask=None, lines_mask=None, query_mask=None):
             memory, mask = self.audio(features, conditions, audio_mask)
             memory = torch.cat((memory, self.line_context(lines)), dim=1)
-            if mask is not None:
-                mask = torch.cat((mask, torch.zeros(lines.shape[:2], device=lines.device, dtype=torch.bool)), dim=1)
-            h = self.events(queries, memory, mask)
+            if mask is not None or lines_mask is not None:
+                if mask is None:
+                    mask = torch.zeros(memory.shape[0], memory.shape[1] - lines.shape[1], dtype=torch.bool, device=lines.device)
+                line_padding = lines_mask if lines_mask is not None else torch.zeros(lines.shape[:2], device=lines.device, dtype=torch.bool)
+                mask = torch.cat((mask, line_padding), dim=1)
+            h = self.events(queries, memory, mask, query_mask)
             extra = self.extra(h)
             return {"line": self.line(h), "x": torch.tanh(self.x(h).squeeze(-1)),
                     "above": self.above(h), "y_offset": torch.tanh(extra[..., 0]),

@@ -55,6 +55,7 @@ export function label(value: unknown) {
   labels.library_reprocess = '补处理容量与时序受限谱面'
   labels.audio_prepare = '准备音频特征'
   labels.dataset_prepare = '核对训练素材与歌曲分组'
+  labels.training_calibration = '校准训练负载'
   const text = String(value ?? '—'); return labels[text.toLowerCase()] || text
 }
 export function time(value?: number) { if (!Number.isFinite(value)) return '—'; const n = Math.max(0, value!); return `${Math.floor(n / 60).toString().padStart(2, '0')}:${(n % 60).toFixed(3).padStart(6, '0')}` }

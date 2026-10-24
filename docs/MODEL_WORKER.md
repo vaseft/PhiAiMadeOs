@@ -34,7 +34,7 @@ manifest 所有使用样本须为 `license_status=explicit_permitted` 且 `allow
 
 ## 优化、验证与记录
 
-默认 microbatch1、累积16、AdamW、warmup+cosine、梯度裁剪1。CUDA优先BF16，否则FP16+GradScaler；CPU为FP32。损失在FP32计算；非有限损失或梯度立即失败。尾部不足16窗按实际数量归一。三个阶段串行训练，阶段间释放模型与优化器。
+基准microbatch1、累积16、AdamW、warmup+cosine、梯度裁剪1。用户要求调优后，可使用本机校准的8×2或16×1等档位；同曲窗口掩码合批、逐窗损失归一、有界CPU预取和运行批量变更约束见 [吞吐调整](40_TRAINING_THROUGHPUT.md)。CUDA优先BF16，否则FP16+GradScaler；CPU为FP32。损失在FP32计算；非有限损失或梯度立即失败。尾部按实际窗口数归一。三个阶段串行训练，阶段间释放模型与优化器。
 
 验证 loss 先在各歌曲簇内求平均，再对歌曲簇求平均；只有该真实验证loss用于best checkpoint和patience8早停。日志中的loss并非可玩性评分。当前实现不宣称提供已验收的时间容差F1、各类型召回、几何质量、客户端成功率、基线对比或冻结测试集结果；这些评测仍需补齐并实际执行。
 

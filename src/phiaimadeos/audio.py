@@ -12,6 +12,7 @@ import uuid
 
 import numpy as np
 from scipy import signal
+from .settings import atomic_json
 
 SAMPLE_RATE = 22050
 HOP = 882
@@ -70,7 +71,7 @@ def probe_audio(path):
 
 def _samples(path, info):
     """Yield mono 22050 Hz blocks. Seek overlap avoids resampling block seams."""
-    total = math.ceil(info["duration_s"] * SAMPLE_RATE)
+    total = (info["frames"] * SAMPLE_RATE + info["sample_rate"] - 1) // info["sample_rate"]
     if info["decoder"] == "ffmpeg":
         process = subprocess.Popen([shutil.which("ffmpeg"), "-nostdin", "-v", "error", "-protocol_whitelist", "file,pipe",
                                     "-i", str(Path(path).resolve()), "-map", "0:a:0", "-vn", "-sn", "-dn",
@@ -168,7 +169,14 @@ def _tempo(envelope):
 
 def analyze_audio(path, cache_dir, progress=None):
     """Return analysis paths and heuristic evidence; progress(fraction, Chinese text)."""
+    path = Path(path).resolve(strict=True)
+    source_before = path.stat()
+    if progress:
+        progress(0.0, "正在核对音频 SHA-256 与当前版本缓存")
     info = probe_audio(path)
+    # Derive frame counts from the decoder's integer sample count. Multiplying a
+    # decimal duration before ceil can invent an extra frame at exact hop edges.
+    expected_frames = (info["frames"] * SAMPLE_RATE + info["sample_rate"] * HOP - 1) // (info["sample_rate"] * HOP)
     cache_dir = Path(cache_dir).resolve()
     cache_dir.mkdir(parents=True, exist_ok=True)
     prefix = info["sha256"] + "-dsp-v1"
@@ -181,14 +189,21 @@ def analyze_audio(path, cache_dir, progress=None):
             if (cached.get("feature_version") == FEATURE_VERSION and cached.get("audio_sha256") == info["sha256"]
                     and Path(cached["feature_path"]).resolve() == feature_path and Path(cached["waveform_path"]).resolve() == waveform_path
                     and feature_path.is_file() and waveform_path.is_file()
-                    and _hash_file(cached["feature_path"]) == cached.get("feature_sha256")):
+                    and _hash_file(feature_path) == cached.get("feature_sha256")
+                    and _hash_file(waveform_path) == cached.get("waveform_sha256")):
+                values = np.load(feature_path, mmap_mode="r", allow_pickle=False)
+                valid_shape = (values.shape == (expected_frames, 104)
+                               and values.dtype == np.dtype("float32"))
+                del values
+                if not valid_shape:
+                    raise ValueError("音频特征缓存形状或类型不一致")
                 if progress:
                     progress(1.0, "已读取当前版本音频特征缓存")
+                cached["feature_frames"] = expected_frames
                 return cached
         except (OSError, ValueError, KeyError):
             pass
     temporary = cache_dir / (prefix + "-" + uuid.uuid4().hex + ".tmp.npy")
-    expected_frames = math.ceil(info["duration_s"] * SAMPLE_RATE / HOP)
     features = np.lib.format.open_memmap(temporary, mode="w+", dtype="float32", shape=(expected_frames, 104))
     frequencies, melbank, chromabank, bands = _filterbanks()
     window = np.hanning(N_FFT)
@@ -244,6 +259,10 @@ def analyze_audio(path, cache_dir, progress=None):
         consume(np.empty(0, dtype=np.float32), final=True)
         if index != expected_frames:
             raise ValueError("实际特征帧数与音频时长不一致")
+        source_after = path.stat()
+        if ((source_before.st_size, source_before.st_mtime_ns) != (source_after.st_size, source_after.st_mtime_ns)
+                or _hash_file(path) != info["sha256"]):
+            raise ValueError("音频在特征提取期间发生变化；未发布此次缓存")
         features.flush()
         del features
         temporary.replace(feature_path)
@@ -289,15 +308,16 @@ def analyze_audio(path, cache_dir, progress=None):
         warnings.append(f"检测到 {clipped} 个幅值超过 1 的样本；仅报告，未自动改音频")
     waveform = {"peaks": peaks, "duration_s": info["duration_s"], "hop": HOP, "sample_rate": SAMPLE_RATE,
                 "frame_time": "centered_at_index_times_hop", "version": FEATURE_VERSION}
-    waveform_path.write_text(json.dumps(waveform, ensure_ascii=False, allow_nan=False), encoding="utf-8")
+    atomic_json(waveform_path, waveform, compact=True)
     result = {"feature_path": str(feature_path), "waveform_path": str(waveform_path), "analysis_path": str(analysis_path),
               "onsets_s": onset_times, "onset_strength": normalized[onset_indices].tolist(),
               "bpm": tempo["bpm"], "beat_times_s": beat_times, "duration_s": info["duration_s"],
               "sample_rate": SAMPLE_RATE, "original_sample_rate": info["sample_rate"], "channels": info["channels"],
               "hop": HOP, "frame_rate": 25, "feature_dim": 104, "feature_version": FEATURE_VERSION,
+              "feature_frames": expected_frames, "original_frames": info["frames"],
               "feature_layout": {"mel_log_power": [0, 80], "chroma": [80, 92], "band_flux": [92, 100],
                                  "rms": 100, "centroid_normalized": 101, "rolloff_normalized": 102, "spectral_flux": 103},
-              "feature_sha256": _hash_file(feature_path), "audio_sha256": info["sha256"],
+              "feature_sha256": _hash_file(feature_path), "waveform_sha256": _hash_file(waveform_path), "audio_sha256": info["sha256"],
               "rms_curve": rms_values, "rms_hop_s": 0.04, "silence_intervals": silence,
               "silence_rms_threshold": threshold, "tempo": tempo, "tempo_regions": regions,
               "confidence": tempo["confidence"], "provenance": "traditional_cpu_dsp", "warnings": warnings}

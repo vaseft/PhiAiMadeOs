@@ -266,7 +266,7 @@ def generate_learned(analysis: dict, conditions: dict, bundle: dict, project_roo
     requested_device = bundle.get("inference_device", "cuda" if torch.cuda.is_available() else "cpu")
     if requested_device not in ("cuda", "cuda:0", "cpu") or (requested_device != "cpu" and not torch.cuda.is_available()):
         raise ModelError("DEVICE_UNAVAILABLE", "指定推理设备不可用。")
-    device = torch.device(requested_device)
+    device = torch.device("cuda:0" if requested_device == "cuda" else requested_device)
     if device.type == "cuda":
         torch.cuda.set_device(device)
         torch.cuda.reset_peak_memory_stats(device)

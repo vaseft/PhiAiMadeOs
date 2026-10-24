@@ -18,9 +18,9 @@ import hashlib
 from .formats import (MAX_JSON_BYTES, MAX_LINES, MAX_NOTES, _check_tree,
                       _finite, beat_triplet, canonical_bytes, has_noise)
 
-MAPPING_VERSION = "phira-pro-4ed6aaf-native-rpe-v1"
-MAX_SOURCE_EVENTS = 100_000
-MAX_TARGET_EVENTS = 150_000
+MAPPING_VERSION = "phira-pro-4ed6aaf-native-rpe-v2"
+MAX_SOURCE_EVENTS = 1_000_000
+MAX_TARGET_EVENTS = 2_000_000
 MAX_ABS_TICKS = 2 ** 31
 MAX_ABS_SCALAR = 10 ** 12
 MAX_DENOMINATOR = 1_000_000
@@ -112,7 +112,7 @@ class _Conversion:
     def event(self, start_s, end_s, start_value, end_value, provenance):
         self.target_events += 1
         if self.target_events > MAX_TARGET_EVENTS:
-            raise ValueError("转换后事件超过150000个，拒绝截断")
+            raise ValueError(f"转换后事件超过{MAX_TARGET_EVENTS}个资源上限；原件保留，不截断")
         return {"startTime": self.beat(start_s), "endTime": self.beat(end_s),
                 "start": _number(start_value, provenance + ".start"),
                 "end": _number(end_value, provenance + ".end"), "easingType": 1,
@@ -128,13 +128,21 @@ def _source_event(event, source):
     if required - set(event):
         raise ValueError(f"{source}: 缺少事件字段 {sorted(required - set(event))}")
     start, end = _fraction(event["startTime"], source + ".startTime"), _fraction(event["endTime"], source + ".endTime")
-    if start > end:
-        # Upstream discards these. Refusal is explicit and keeps the raw chart;
-        # silently deleting a source event would hide a compatibility decision.
-        raise ValueError(f"{source}: 反向事件在客户端会被忽略；本转换器拒绝静默删除")
     for key in ("start", "end", "start2", "end2"):
         _number(event.get(key, 0), source + "." + key)
     return start, end
+
+
+def _ignored_reverse_event(event, source, index, conversion):
+    """Mirror validate_events! without losing the author's invalid range."""
+    conversion.resolutions.append({
+        "source": source, "source_index": index,
+        "action": "native_reverse_event_ignored",
+        "original_event": copy.deepcopy(event),
+        "runtime_rule": "Phira-Pro pgr.rs validate_events!: startTime > endTime is ignored",
+        "original_bytes_retained": True,
+    })
+    conversion.warn("反向事件按锁定原生客户端规则不参与运行时；完整原值、原数组索引和规范化动作已登记，原始JSON保持只读")
 
 
 def _motion_track(events, tick_seconds, mapping, source, conversion, format_version=3):
@@ -144,6 +152,9 @@ def _motion_track(events, tick_seconds, mapping, source, conversion, format_vers
     for index, original in enumerate(events):
         location = f"{source}[{index}]"
         start, end = _source_event(original, location)
+        if start > end:
+            _ignored_reverse_event(original, location, index, conversion)
+            continue
         unknown = _unknown(original, EVENT_FIELDS)
         if unknown:
             conversion.resolutions.append({"source": location, "action": "unknown_fields_preserved", "fields": unknown})
@@ -184,6 +195,8 @@ def _motion_track(events, tick_seconds, mapping, source, conversion, format_vers
             points.append((end * tick_seconds, finish, location, "end"))
     axes = 2 if mapping == "move" else 1
     if not points:
+        if events:
+            raise ValueError(f"{source}: 反向运动事件按原生规则忽略后为空，锁定客户端不能解析；原件保留，不猜测默认运动")
         # Anim::default => zero translation/rotation, alpha defaults to one.
         defaults = (0.0, 0.0) if mapping == "move" else ((255.0,) if mapping == "alpha" else (0.0,))
         conversion.warn("存在空运动轨道：按原生客户端的默认位置/旋转/透明度显式补常量")
@@ -231,27 +244,86 @@ def _motion_track(events, tick_seconds, mapping, source, conversion, format_vers
     return output
 
 
+def _normalize_height_tail(keyframes, native_terminal, native_max_s, source, conversion, original_events):
+    """Keep the native height function before its malformed final keyframe.
+
+    Native pgr appends max(last note/Hold end) + 1 second even when authored
+    speed starts extend beyond it. Appending that earlier endpoint makes Anim
+    cursor/seek results history-dependent from that time onward. Before that
+    time all comparisons still form a sorted partition, so the authored
+    height frames define one unambiguous piecewise-linear function. Clip that
+    function at the boundary; never sort the backwards native endpoint into
+    the middle, which would change note heights in the playable interval.
+    """
+    for index, (left, right) in enumerate(zip(keyframes, keyframes[1:])):
+        if left[0] <= native_max_s <= right[0]:
+            if right[0] == native_max_s:
+                boundary = right
+                kept = keyframes[:index + 2]
+            else:
+                height = left[1] + (right[1] - left[1]) * (native_max_s - left[0]) / (right[0] - left[0])
+                boundary = (native_max_s, height, source + ":normalized_native_height_end")
+                kept = keyframes[:index + 1] + [boundary]
+            break
+    else:
+        raise ValueError(f"{source}: 无法找到原生height末音符后边界的有效线段，拒绝猜测流速")
+    def frame_record(frame):
+        return {"time_s_exact": str(frame[0]), "height_integral_exact": str(frame[1]), "source": frame[2]}
+    first_changed = next(index for index, frame in enumerate(keyframes) if frame[0] > native_max_s)
+    conversion.resolutions.append({
+        "source": source,
+        "action": "native_nonmonotonic_height_tail_normalized",
+        "runtime_valid_interval_s": {"start_inclusive": 0, "end_exclusive": float(native_max_s)},
+        "last_note_or_hold_end_s": float(native_max_s - 1),
+        "boundary_time_s_exact": str(native_max_s),
+        "native_terminal_keyframe": frame_record(native_terminal),
+        "effective_terminal_keyframe": frame_record(boundary),
+        "boundary_interpolation_segment": [frame_record(left), frame_record(right)],
+        "original_speed_event_at_boundary": next(
+            {"source": location, "source_index": original_index, "original_event": copy.deepcopy(event)}
+            for _, location, original_index, event in original_events if location == left[2]
+        ),
+        "original_keyframes_after_boundary": [frame_record(frame) for frame in keyframes[first_changed:]],
+        "original_speed_events_after_boundary": [
+            {"source": location, "source_index": original_index, "original_event": copy.deepcopy(event)}
+            for time_s, location, original_index, event in original_events if time_s > native_max_s
+        ],
+        "normalization": "keep native height interpolation before the boundary; freeze its boundary value afterward",
+        "seek_equivalence_after_boundary": False,
+        "original_bytes_retained": True,
+    })
+    conversion.warn("原生height尾终点早于后续流速帧：保留全曲最后音符/Hold结束后1秒之前的原顺序高度函数，在该边界按活跃线段内插并冻结；原尾帧及受影响流速原值已记录，不宣称边界后的游标/任意seek等价")
+    return kept
+
+
 def _speed_track(events, tick_seconds, native_max_s, target_max_s, source, conversion):
     if not events:
         raise ValueError(f"{source}: 原生客户端要求至少一个speedEvent，不能猜测缺失流速")
     parsed = []
+    original_events = []
     for index, event in enumerate(events):
         location = f"{source}[{index}]"
         if not isinstance(event, dict) or not {"startTime", "endTime", "value"} <= set(event):
             raise ValueError(f"{location}: 流速事件缺少字段")
         start, end = _fraction(event["startTime"], location + ".startTime"), _fraction(event["endTime"], location + ".endTime")
-        if start > end:
-            raise ValueError(f"{location}: 反向流速事件会被原生客户端丢弃，转换器拒绝静默删除")
         value = Fraction(str(_number(event["value"], location + ".value")))
+        if start > end:
+            _ignored_reverse_event(event, location, index, conversion)
+            continue
         unknown = _unknown(event, {"startTime", "endTime", "value"})
         if unknown:
             conversion.resolutions.append({"source": location, "action": "unknown_fields_preserved", "fields": unknown})
-        if index == 0 and start != 0:
+        if not parsed and start != 0:
             conversion.resolutions.append({"source": location, "action": "native_first_speed_start_forced_zero",
                                            "original_start_tick": event["startTime"]})
             conversion.warn("首个流速起点按锁定原生客户端强制归0，而不是保留其原始负/正起点")
             start = Fraction(0)
+        if parsed and start < parsed[-1][0]:
+            raise ValueError(f"{location}: 作者流速起点自身倒序会使有效音符区间依赖原生游标，标准RPE不能通过排序等价表达；原件保留")
         parsed.append((start, end, value, location))
+        original_events.append((start * tick_seconds, location, index, event))
+    if not parsed:
+        raise ValueError(f"{source}: 反向流速按原生规则忽略后为空，锁定客户端不能解析；原件保留，不猜测默认流速")
     height_area = Fraction(0)
     keyframes = []
     for index, (start, end, value, location) in enumerate(parsed):
@@ -263,10 +335,12 @@ def _speed_track(events, tick_seconds, native_max_s, target_max_s, source, conve
                                                "authored_end_tick": str(end), "next_start_tick": str(parsed[index + 1][0])})
                 conversion.warn("不连续/重叠流速已按原生height积分及相邻起点斜率重建；不承诺编辑器结构无损")
         else:
-            if start * tick_seconds > native_max_s:
-                raise ValueError(f"{location}: 最后流速起点超过原生全曲height终点，客户端会形成非单调关键帧")
             final_area = height_area * tick_seconds + (native_max_s - start * tick_seconds) * value
-            keyframes.append((native_max_s, final_area, location))
+            native_terminal = (native_max_s, final_area, location)
+            if start * tick_seconds > native_max_s:
+                keyframes = _normalize_height_tail(keyframes, native_terminal, native_max_s, source, conversion, original_events)
+            else:
+                keyframes.append(native_terminal)
     compact = []
     for frame in keyframes:
         if compact and frame[0] < compact[-1][0]:
@@ -301,7 +375,7 @@ def convert_official(chart, info=None):
     _check_tree(chart)
     source_bytes = canonical_bytes(chart)
     if len(source_bytes) > MAX_JSON_BYTES:
-        raise ValueError("原生JSON超过32 MiB安全限额")
+        raise ValueError(f"原生JSON超过{MAX_JSON_BYTES // (1024 * 1024)} MiB资源上限；原件保留，不截断")
     source_hash = hashlib.sha256(source_bytes).hexdigest()
     del source_bytes
     version = chart.get("formatVersion")
@@ -352,7 +426,7 @@ def convert_official(chart, info=None):
         for name in EVENT_NAMES:
             total_events += len(_array(line.get(name), path + "." + name))
         if total_notes > MAX_NOTES or total_events > MAX_SOURCE_EVENTS:
-            raise ValueError("原生音符/事件数量超出安全上限，拒绝截断")
+            raise ValueError(f"原生音符超过{MAX_NOTES}个或事件超过{MAX_SOURCE_EVENTS}个资源上限；原件保留，不截断")
     reference_bpm = native_lines[0]["bpm"]
     conversion = _Conversion(reference_bpm)
     native_max_s = last_note_s + 1
@@ -456,5 +530,5 @@ def convert_official(chart, info=None):
                                 "warnings": warnings, "parser_version": MAPPING_VERSION}}
     _check_tree(result)
     if len(canonical_bytes(result)) > MAX_JSON_BYTES:
-        raise ValueError("转换后的RPE超过32 MiB安全限额；原件保留，不截断音符或provenance")
+        raise ValueError(f"转换后的RPE超过{MAX_JSON_BYTES // (1024 * 1024)} MiB资源上限；原件保留，不截断音符或provenance")
     return result

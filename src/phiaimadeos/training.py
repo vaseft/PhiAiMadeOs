@@ -290,6 +290,12 @@ def run_training(request: dict, project_root, progress=None, pause_requested=Non
     effective_batch = microbatch * accumulation
     manifest_path = safe_path(root, request.get("manifest_path"))
     manifest, samples = read_manifest(manifest_path, root)
+    warm_parent = None
+    if request.get("warm_start_run_id"):
+        if request.get("resume_run_id"):
+            raise ModelError("INVALID_TRAIN_CONFIG", "同一运行断点恢复与跨数据源初始化不能混用。")
+        from .training_sources import guard_warm_start
+        warm_parent = guard_warm_start(root, request["warm_start_run_id"], manifest)
     max_lines = request.get("max_lines", MAX_LINES)
     model_config("line_motion", max_lines)
     cache = SongCache(root, samples, max_lines=max_lines)
@@ -343,7 +349,7 @@ def run_training(request: dict, project_root, progress=None, pause_requested=Non
     amp_enabled = device.type == "cuda"
     environment = _environment(torch, device, root)
     environment["source_sha256"] = {name: file_hash(Path(__file__).with_name(name))
-                                     for name in ("models.py", "_model_data.py", "_training_batch.py", "training.py", "inference.py", "formats.py", "audio.py")}
+                                     for name in ("models.py", "_model_data.py", "_training_batch.py", "training.py", "training_sources.py", "inference.py", "formats.py", "audio.py")}
     config["device"] = str(device)
     config["precision"] = "bf16" if amp_enabled and amp_dtype == torch.bfloat16 else "fp16" if amp_enabled else "fp32"
     config_sha = canonical_hash(config)
@@ -351,7 +357,10 @@ def run_training(request: dict, project_root, progress=None, pause_requested=Non
     resume_id = request.get("resume_run_id")
     if resume_id and (not isinstance(resume_id, str) or not all(c.isalnum() or c in "-_" for c in resume_id) or len(resume_id) > 100):
         raise ModelError("INVALID_RUN_ID", "恢复任务 ID 无效。")
-    run_id = resume_id or uuid.uuid4().hex
+    new_id = request.get("new_run_id")
+    if new_id and (not isinstance(new_id, str) or not 1 <= len(new_id) <= 100 or not all(c.isalnum() or c in "-_" for c in new_id)):
+        raise ModelError("INVALID_RUN_ID", "新训练运行ID无效。")
+    run_id = resume_id or new_id or uuid.uuid4().hex
     run_dir = (base / run_id).resolve()
     if not run_dir.is_relative_to(base):
         raise ModelError("UNSAFE_PATH", "训练运行目录越出受管理路径。")
@@ -383,6 +392,8 @@ def run_training(request: dict, project_root, progress=None, pause_requested=Non
                      "runtime_batch_changed": batch_changed, "effective_batch_preserved": old_effective == effective_batch})
         record.update(config=config, train_config_sha256=config_sha)
     else:
+        if warm_parent and (warm_parent["config"]["models"] != config["models"] or warm_parent["feature_extractor_version"] != samples[0]["feature_version"]):
+            raise ModelError("ARCHITECTURE_MISMATCH", "跨数据源初始化的模型架构或特征版本不兼容。")
         run_dir.mkdir(parents=True, exist_ok=False)
         record = {"id": run_id, "run_id": run_id, "created_at": _now(), "status": "experimental", "training_state": "running",
                   "dataset_id": request.get("dataset_id", manifest.get("id")), "dataset_manifest_id": manifest.get("id"),
@@ -395,6 +406,14 @@ def run_training(request: dict, project_root, progress=None, pause_requested=Non
                   "window_report": window_report, "source_fingerprints": fingerprints, "stages": {}, "metrics_path": relative_path(root, log_path),
                   "validation": "song_grouped", "test_evaluation": "NOT RUN", "playtest": "NOT RUN",
                   "audit_report_id": None, "human_review_id": None, "max_vram_gib_observed": None}
+        if warm_parent:
+            record["source_lineage"] = [*warm_parent.get("source_lineage", []),
+                {"run_id": warm_parent["run_id"], "dataset_id": warm_parent["dataset_id"],
+                 "dataset_manifest_sha256": warm_parent["dataset_manifest_sha256"]}]
+            record["source_transition"] = request.get("source_transition", {})
+            record["warm_start"] = {"parent_run_id": warm_parent["run_id"], "optimizer_reset": True,
+                "stages": {name: {key: info[key] for key in ("checkpoint_path", "checkpoint_sha256", "config", "feature_version", "motion_dictionary") if key in info}
+                           for name, info in warm_parent["stages"].items()}}
     record["training_state"] = "running"
     record["job_id"] = request.get("job_id")
     _atomic_json(run_path, record)
@@ -420,11 +439,22 @@ def run_training(request: dict, project_root, progress=None, pause_requested=Non
             if device.type == "cuda":
                 torch.cuda.manual_seed_all(stage_seed)
             motion_dictionary = None
+            warm_stage = record.get("warm_start", {}).get("stages", {}).get(name, {})
             if name == "line_motion":
-                motion_dictionary = previous.get("motion_dictionary") or fit_motion_dictionary(cache, stage_seed)
+                motion_dictionary = previous.get("motion_dictionary") or warm_stage.get("motion_dictionary") or fit_motion_dictionary(cache, stage_seed)
             model = build_model(name, config["models"][name]).to(device)
             if motion_dictionary is not None:
                 set_motion_dictionary(model, motion_dictionary)
+            if warm_stage and not previous.get("resume_checkpoint_path"):
+                weight = safe_path(root, warm_stage["checkpoint_path"])
+                parent_dir = base / record["warm_start"]["parent_run_id"]
+                if not weight.is_relative_to(parent_dir.resolve()) or file_hash(weight) != warm_stage["checkpoint_sha256"]:
+                    raise ModelError("CHECKPOINT_HASH_MISMATCH", "父运行最优权重路径或SHA已改变。")
+                payload = torch.load(weight, map_location="cpu", weights_only=True)
+                if payload.get("config") != config["models"][name] or payload.get("feature_version") != samples[0]["feature_version"]:
+                    raise ModelError("ARCHITECTURE_MISMATCH", "父权重架构或特征不兼容。")
+                model.load_state_dict(payload["model"], strict=True)
+                del payload
             optimizer = torch.optim.AdamW(model.parameters(), lr=config["learning_rate"], weight_decay=config["weight_decay"], foreach=False)
             train_indices, val_indices = stage_windows[name]["train"], stage_windows[name]["val"]
             steps_per_epoch = math.ceil(len(train_indices) / effective_batch)
@@ -444,6 +474,8 @@ def run_training(request: dict, project_root, progress=None, pause_requested=Non
                           "motion_dictionary": motion_dictionary,
                           "train_groups": sorted({samples[windows[i].sample_index]["group_id"] for i in train_indices}),
                           "validation_groups": sorted({samples[windows[i].sample_index]["group_id"] for i in val_indices})}
+            if warm_stage:
+                stage_info["warm_start_checkpoint_sha256"] = warm_stage["checkpoint_sha256"]
             if previous.get("resume_checkpoint_path"):
                 resume_path = safe_path(root, previous["resume_checkpoint_path"])
                 if not resume_path.is_relative_to(run_dir.resolve()) or file_hash(resume_path) != previous["resume_checkpoint_sha256"]:

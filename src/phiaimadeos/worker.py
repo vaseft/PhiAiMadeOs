@@ -101,6 +101,11 @@ def perform(kind, request, progress, store, secret):
         if file_hash(manifest) != dataset["sha256"]:
             raise ValueError("训练集 manifest 内容发生变化")
         effective = {**request, "manifest_path": dataset["manifest_path"]}
+        if request.get("warm_start_run_id"):
+            from .training_sources import SourcePlanner, read_run
+            parent, _ = read_run(settings, request["warm_start_run_id"])
+            confirmed = SourcePlanner(store).compatible(parent, request["dataset_id"])
+            effective["source_transition"] = {**request.get("source_transition", {}), **confirmed}
         with gpu_lock(settings):
             result = run_training(effective, settings.root, progress,
                 pause_requested=lambda: bool(store.get("jobs", request["job_id"]).get("pause_requested")) if request.get("job_id") else False)

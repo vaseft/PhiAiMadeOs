@@ -510,8 +510,12 @@ def create_app():
         return await simple_trainer.set_auto(payload.get("enabled"))
 
     @app.get("/api/v1/trainer/analysis")
-    def trainer_analysis():
-        return simple_trainer.analysis()
+    def trainer_analysis(run_id: str | None = None):
+        return simple_trainer.analysis(run_id)
+
+    @app.post("/api/v1/trainer/source-auto")
+    async def trainer_source_auto(payload: dict):
+        return await simple_trainer.set_source_auto(payload.get("enabled"))
 
     @app.post("/api/v1/models/{model_id}/promote")
     def promote(model_id: str, payload: dict):

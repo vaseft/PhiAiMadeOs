@@ -1,0 +1,10 @@
+# Copy into trusted Codex ~/.codex/config.toml AFTER editing absolute paths.
+# The environment variable points ONLY to files you explicitly permit PAMOs to edit.
+[mcp_servers.pamos_rpe]
+command = "/absolute/path/to/project/.venv/bin/python"
+args = ["-m", "pamos_mcp.server"]
+cwd = "/absolute/path/to/project"
+env = { PAMOs_RPE_WORKSPACE = "/absolute/path/to/authorized_charts" }
+enabled = true
+startup_timeout_sec = 20
+tool_timeout_sec = 90

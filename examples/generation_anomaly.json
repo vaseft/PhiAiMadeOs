@@ -1,0 +1,21 @@
+{
+  "condition_schema_version": "3.0.0",
+  "music_asset_id": "local_asset_example_001",
+  "model_bundle_id": "example_bundle_untrained_DO_NOT_USE",
+  "difficulty_class": "IN",
+  "difficulty_value": 16,
+  "chart_mode": "anomaly",
+  "key_count": null,
+  "performance_intensity": 80,
+  "performance_style": "experimental",
+  "wildness": 85,
+  "generation_priority": "balanced",
+  "special_features": [
+    "visual_noise"
+  ],
+  "strict_playability": true,
+  "seed": 42,
+  "target_duration": "full_song",
+  "target_engine": "phira",
+  "target_engine_version": "0.8.2"
+}

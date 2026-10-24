@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0.0",
+  "request_id": "demo",
+  "chart_hash": "hash-demo",
+  "segment_hash": "hash-seg-demo",
+  "status": "proposed",
+  "summary": "该音符时间略偏离高置信度节奏参考，建议局部微调，待本地审核。",
+  "patches": [
+    {
+      "op_id": "p1",
+      "op": "MOVE_NOTE_TIME",
+      "target_id": "n42",
+      "payload": {
+        "new_start_beat": 33.125
+      },
+      "reason": "n42 原在 33.0 拍，与 local_onset_3 的高置信度时刻略偏离；轻微移动可改善一致性，仍需人工听感确认。",
+      "evidence_refs": [
+        "local_onset_3"
+      ],
+      "confidence": 0.72
+    }
+  ],
+  "review_flags": []
+}

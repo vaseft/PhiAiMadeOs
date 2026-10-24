@@ -1,0 +1,25 @@
+{
+  "schema_version": "5.0.0",
+  "session_id": "example-session",
+  "project_id": "example-project",
+  "expected_revision": "example-sha256-rev",
+  "chart_mode": "pure_keys",
+  "format_adapter": "rpe_next",
+  "key_count": 4,
+  "noise_write_enabled": false,
+  "operations": [
+    {
+      "op_id": "patch-1",
+      "op": "MOVE_NOTE_LANE",
+      "target_id": "note-17",
+      "payload": {
+        "new_lane_index": 2
+      },
+      "reason": "示例：避免同指冲突；真实操作应引用实测数据",
+      "evidence_refs": [
+        "audit:collision-1"
+      ],
+      "confidence": 0.8
+    }
+  ]
+}

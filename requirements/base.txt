@@ -1,0 +1,17 @@
+# PhiAiMadeOs CPU/DSP/API requirements. Install PyTorch CUDA wheel separately.
+numpy>=1.26,<3
+scipy>=1.13,<2
+librosa>=0.10.2,<0.13
+soundfile>=0.12,<1
+scikit-learn>=1.5,<2
+psutil>=6,<9
+safetensors>=0.4,<1
+PyYAML>=6,<7
+pydantic>=2.7,<3
+fastapi>=0.110,<1
+uvicorn>=0.30,<1
+SQLAlchemy>=2.0,<3
+pytest>=8,<10
+# V3 JSON Schema contracts, DB migration
+jsonschema>=4.22,<5
+alembic>=1.13,<2

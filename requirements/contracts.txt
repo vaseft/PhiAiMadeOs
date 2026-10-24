@@ -1,0 +1,3 @@
+# CPU-only schema validation; no training or paid API dependencies.
+jsonschema>=4.22,<5
+PyYAML>=6,<7

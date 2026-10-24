@@ -1,0 +1,16 @@
+{
+  "verified_on": "2026-10-24",
+  "rpe_next": {
+    "repository": "kclg-YSJ/rpe-next",
+    "commit": "740fe7ebaa04506f26fdec4e37794f97da1fcf4d",
+    "observed_version": "0.12.2",
+    "license": "PolyForm-Noncommercial-1.0.0",
+    "basis": ["README.md", "package.json", "LICENSE", "protocols/MOD-PROTOCOL.zh-CN.md", "schemas/mod-api-v1.d.ts", "src/core/chart.mjs"]
+  },
+  "phira_pro": {
+    "repository": "Phira-Pro/Phira-Pro",
+    "commit": "4ed6aaf6b844cfe59c9122a068f3fe5411553936",
+    "license": "GPL-3.0"
+  },
+  "warning": "Pinning a commit does not establish actual format interoperability or runtime compatibility. Run tests before claims."
+}

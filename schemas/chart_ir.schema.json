@@ -1,0 +1,446 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.phiaimadeos.invalid/schemas/chart_ir.schema.json",
+  "title": "PhiAiMadeOs Chart IR v1/V4 extension (read-only noise)",
+  "type": "object",
+  "required": [
+    "ir_version",
+    "chart_id",
+    "audio_ref",
+    "bpm_map",
+    "time_mapping",
+    "judge_lines",
+    "notes"
+  ],
+  "properties": {
+    "ir_version": {
+      "type": "string",
+      "enum": [
+        "1.0.0",
+        "1.1.0"
+      ]
+    },
+    "chart_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "song_group_id": {
+      "type": "string"
+    },
+    "audio_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_format": {
+      "enum": [
+        "RPE",
+        "OFFICIAL",
+        "PEC",
+        "PBC",
+        "INTERNAL",
+        "UNKNOWN"
+      ]
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "time_mapping": {
+      "type": "object",
+      "required": [
+        "mapping_version",
+        "audio_minus_chart_seconds",
+        "verified_against_client"
+      ],
+      "properties": {
+        "mapping_version": {
+          "type": "string"
+        },
+        "audio_minus_chart_seconds": {
+          "type": "number"
+        },
+        "verified_against_client": {
+          "type": "boolean"
+        },
+        "source_fields": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "bpm_map": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "start_beat",
+          "bpm"
+        ],
+        "properties": {
+          "start_beat": {
+            "$ref": "#/$defs/beat"
+          },
+          "bpm": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "judge_lines": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "events"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "parent_line_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/lineEvent"
+            }
+          },
+          "layers_count": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "raw_payload": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "line_id",
+          "kind",
+          "start_beat",
+          "x",
+          "above",
+          "is_fake"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "line_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "enum": [
+              "TAP",
+              "HOLD",
+              "FLICK",
+              "DRAG"
+            ]
+          },
+          "start_beat": {
+            "$ref": "#/$defs/beat"
+          },
+          "end_beat": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/beat"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "x": {
+            "type": "number"
+          },
+          "above": {
+            "enum": [
+              1,
+              2
+            ]
+          },
+          "is_fake": {
+            "type": "boolean"
+          },
+          "size": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "speed": {
+            "type": "number"
+          },
+          "y_offset": {
+            "type": "number"
+          },
+          "raw_payload": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "lane_index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 5
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "unsupported_features": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "source_file_hash_sha256": {
+      "type": "string"
+    },
+    "chart_mode": {
+      "enum": [
+        "regular",
+        "pure_keys",
+        "anomaly"
+      ]
+    },
+    "lane_layout": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "lane_count",
+            "lane_centers_normalized",
+            "fixed_judgement_y",
+            "render_profile"
+          ],
+          "properties": {
+            "lane_count": {
+              "enum": [
+                4,
+                5,
+                6
+              ]
+            },
+            "lane_centers_normalized": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 4,
+              "maxItems": 6
+            },
+            "fixed_judgement_y": {
+              "type": "number"
+            },
+            "render_profile": {
+              "enum": [
+                "single_static_line",
+                "multi_static_lines"
+              ]
+            }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "anomaly_features": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "feature_id",
+          "start_beat",
+          "end_beat"
+        ],
+        "properties": {
+          "feature_id": {
+            "type": "string"
+          },
+          "start_beat": {
+            "$ref": "#/$defs/beat"
+          },
+          "end_beat": {
+            "$ref": "#/$defs/beat"
+          },
+          "parameters": {
+            "type": "object"
+          },
+          "implementation_origin": {
+            "enum": [
+              "model",
+              "template",
+              "human"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "noise_areas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source_format": {
+            "enum": [
+              "rpe_next",
+              "official_block_area_list",
+              "line2area",
+              "unknown"
+            ]
+          },
+          "source_version": {
+            "type": "string"
+          },
+          "origin_payload_hash": {
+            "type": "string"
+          },
+          "raw_payload": {
+            "type": "object"
+          },
+          "readonly": {
+            "const": true
+          }
+        },
+        "required": [
+          "source_format",
+          "raw_payload",
+          "readonly"
+        ],
+        "additionalProperties": true
+      }
+    }
+  },
+  "$defs": {
+    "beat": {
+      "type": "object",
+      "required": [
+        "numerator",
+        "denominator"
+      ],
+      "properties": {
+        "numerator": {
+          "type": "integer"
+        },
+        "denominator": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "lineEvent": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "start_beat",
+        "end_beat",
+        "from_value",
+        "to_value",
+        "layer"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "MOVE_X",
+            "MOVE_Y",
+            "ROTATE",
+            "ALPHA",
+            "SPEED",
+            "OTHER"
+          ]
+        },
+        "start_beat": {
+          "$ref": "#/$defs/beat"
+        },
+        "end_beat": {
+          "$ref": "#/$defs/beat"
+        },
+        "from_value": {
+          "type": "number"
+        },
+        "to_value": {
+          "type": "number"
+        },
+        "layer": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "easing_type": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "bezier_points": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "number"
+          }
+        },
+        "raw_payload": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "chart_mode": {
+            "const": "pure_keys"
+          }
+        },
+        "required": [
+          "chart_mode"
+        ]
+      },
+      "then": {
+        "required": [
+          "lane_layout"
+        ],
+        "properties": {
+          "lane_layout": {
+            "type": "object"
+          },
+          "anomaly_features": {
+            "maxItems": 0
+          }
+        }
+      }
+    }
+  ]
+}

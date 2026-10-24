@@ -1,0 +1,56 @@
+# PhiAiMadeOs V3 generation policy. Initial engineering defaults, not validated weights.
+schema_version: "3.0.0"
+request:
+  difficulty_ranges:
+    EZ: [0, 10]
+    HD: [11, 14]
+    IN: [14, 17]
+    AT: [15, 18]
+  chart_modes: [regular, pure_keys, anomaly]
+  lane_counts: [4, 5, 6]
+  wildness_range: [0, 100]
+  performance_range: [0, 100]
+normalization:
+  pure_keys:
+    static_judgement_lines: true
+    enforce_fixed_k_lanes: true
+    disable_line_motion_model: true
+    performance_intensity: 0
+    performance_style: none
+    special_features: []
+    allow_sv: false
+    generation_priority_allowed: [playability, balanced]
+  regular:
+    key_count: null
+    special_features: []
+  anomaly:
+    key_count: null
+    require_verified_capability: true
+models:
+  common_audio_encoder: cached_cpu_dsp
+  note_rhythm: NoteRhythmNet
+  regular_line: LineMotionNet
+  regular_placement: PlacementNet
+  lane_placement: KLanePlacementHead
+  anomaly_planner: capability_gated_templates
+  sequential_gpu_only: true
+  unknown_condition_label_policy: mask_loss
+inference:
+  full_song_required: true
+  chunked_windows: true
+  beam_width: 1
+  sample_candidates_per_request: 1
+  generate_seed_recorded: true
+  log_fallback_origin: true
+  strong_playability_constraints: true
+  gpu_reserved_budget_gib: 6.2
+audit:
+  independent_non_ai: true
+  must_run_before_review: true
+  pure_keys_static_validation_before_and_after_export: true
+  export_block_on_unsupported_features: true
+export:
+  target: phira
+  format: RPE
+  zip_local_only: true
+  needs_import_and_playtest_for_validated: true

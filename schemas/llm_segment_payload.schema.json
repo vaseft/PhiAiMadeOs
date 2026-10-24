@@ -1,0 +1,225 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PAMOs LLM Segment Payload v4",
+  "type": "object",
+  "required": [
+    "request_id",
+    "chart_hash",
+    "segment_hash",
+    "segment_id",
+    "chart_mode",
+    "key_count",
+    "difficulty_class",
+    "difficulty_value",
+    "wildness",
+    "performance_intensity",
+    "generation_priority",
+    "target_runtime",
+    "editable_beat_window",
+    "context_beat_window",
+    "editable_object_ids",
+    "preserved_ids",
+    "allowed_operations",
+    "max_operations",
+    "notes",
+    "judge_lines",
+    "chart_statistics",
+    "local_dsp_evidence",
+    "deterministic_warnings",
+    "human_feedback"
+  ],
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "chart_hash": {
+      "type": "string",
+      "minLength": 1
+    },
+    "segment_hash": {
+      "type": "string",
+      "minLength": 1
+    },
+    "segment_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "chart_mode": {
+      "enum": [
+        "regular",
+        "pure_keys",
+        "anomaly"
+      ]
+    },
+    "key_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "enum": [
+        4,
+        5,
+        6,
+        null
+      ]
+    },
+    "difficulty_class": {
+      "enum": [
+        "EZ",
+        "HD",
+        "IN",
+        "AT"
+      ]
+    },
+    "difficulty_value": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18
+    },
+    "wildness": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "performance_intensity": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "generation_priority": {
+      "enum": [
+        "playability",
+        "balanced",
+        "performance"
+      ]
+    },
+    "target_runtime": {
+      "type": "object",
+      "required": [
+        "engine",
+        "revision",
+        "verified_features"
+      ],
+      "properties": {
+        "engine": {
+          "const": "phira_pro"
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "verified_features": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "editable_beat_window": {
+      "$ref": "#/$defs/window"
+    },
+    "context_beat_window": {
+      "$ref": "#/$defs/window"
+    },
+    "editable_object_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 300
+    },
+    "preserved_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 300
+    },
+    "allowed_operations": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "MOVE_NOTE_TIME",
+          "CHANGE_NOTE_KIND",
+          "MOVE_NOTE_X",
+          "MOVE_NOTE_LANE",
+          "CHANGE_HOLD_END",
+          "ADD_NOTE",
+          "REMOVE_NOTE",
+          "TUNE_LINE_EVENT",
+          "SUGGEST_ONLY"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "max_operations": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 12
+    },
+    "notes": {
+      "type": "array",
+      "maxItems": 400,
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "judge_lines": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "chart_statistics": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "local_dsp_evidence": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "deterministic_warnings": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "human_feedback": {
+      "type": "string",
+      "maxLength": 2000
+    }
+  },
+  "$defs": {
+    "window": {
+      "type": "object",
+      "required": [
+        "start_beat",
+        "end_beat"
+      ],
+      "properties": {
+        "start_beat": {
+          "type": "number",
+          "minimum": 0
+        },
+        "end_beat": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

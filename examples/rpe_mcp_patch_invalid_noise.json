@@ -1,0 +1,26 @@
+{
+  "schema_version": "5.0.0",
+  "session_id": "example-session",
+  "project_id": "example-project",
+  "expected_revision": "example-sha256-rev",
+  "chart_mode": "anomaly",
+  "format_adapter": "rpe_next",
+  "noise_write_enabled": true,
+  "operations": [
+    {
+      "op_id": "bad",
+      "op": "MOVE_NOTE_LANE",
+      "target_id": "note-17",
+      "payload": {
+        "noise_areas": [
+          {}
+        ]
+      },
+      "reason": "invalid",
+      "evidence_refs": [
+        "test"
+      ],
+      "confidence": 1.0
+    }
+  ]
+}

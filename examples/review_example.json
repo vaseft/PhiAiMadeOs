@@ -1,0 +1,30 @@
+{
+  "review_id": "review_0001",
+  "candidate_id": "candidate_demo",
+  "candidate_version": 1,
+  "reviewer": "local_reviewer",
+  "created_at": "2026-10-24T13:00:00+08:00",
+  "scores": {
+    "rhythm": 3.5,
+    "playability": 2.5,
+    "readability": 3.0,
+    "line_motion": 2.5,
+    "difficulty_fit": 4.0,
+    "completeness": 4.0
+  },
+  "total": 61.5,
+  "decision": "REVISION_REQUESTED",
+  "playtested": false,
+  "warn_override_reason": null,
+  "comment": "有一处判定线遮挡和一处疑似节奏偏移，请修改后再次试听。",
+  "annotations": [{
+    "start_ms": 54200,
+    "end_ms": 56000,
+    "note_ids": ["note_132"],
+    "line_ids": ["line_02"],
+    "type": "VISUAL_OCCLUSION",
+    "severity": "HIGH",
+    "comment": "线运动导致 Flick 被遮挡，需调整轨迹或更换配置。",
+    "action": "REGENERATE_SEGMENT"
+  }]
+}

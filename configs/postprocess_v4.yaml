@@ -1,0 +1,48 @@
+version: "4.0.0"
+project: PhiAiMadeOs
+alias: PAMOs
+runtime:
+  engine: phira_pro
+  pinned_revision: "UNSET_VERIFY_BEFORE_BUILD"
+noise_area:
+  separate_feature: true
+  generation_enabled: false
+  train_in_first_model: false
+  allow_read_preserve_existing: true
+  allow_llm_write: false
+  export_lossy_silently: false
+postprocess:
+  enabled_default: false
+  default_mode: suggest
+  modes: [off, suggest, apply_safe, human_select]
+  require_explicit_remote_consent: true
+  upload_raw_audio_default: false
+  upload_full_chart_default: false
+  segment_center_bars: 4
+  context_bars_each_side: 1
+  max_segments_per_job: 12
+  max_patches_per_segment: 12
+  max_api_parallel: 1
+  model_temperature: 0.15
+  timeout_seconds: 90
+  llm_system_prompt: prompts/LLM_CHART_REFINER_SYSTEM_ZH.md
+  network_failure_policy: preserve_original
+  patch_failure_policy: atomic_rollback
+  always_run_non_ai_audit_after_patch: true
+  preserve_all_candidate_versions: true
+  default_allowed_ops: [MOVE_NOTE_TIME, CHANGE_NOTE_KIND, MOVE_NOTE_X, MOVE_NOTE_LANE, CHANGE_HOLD_END, ADD_NOTE, REMOVE_NOTE, TUNE_LINE_EVENT, SUGGEST_ONLY]
+  never_write: [noise_areas, blockAreaList, bpm_map, BPMList, time_mapping, raw_payload, chart_mode, key_count, score, real_combo]
+providers:
+  type: openai_compatible_chat_adapter
+  api_key_env: PAMOS_LLM_API_KEY
+  base_url: ""  # explicitly provided by user; no invented provider endpoint
+  model: ""     # explicitly provided by user
+  max_attempts: 2
+  response_format_preference: json_schema
+  cost_budget_usd_per_job: 0.5
+security:
+  bind_address: 127.0.0.1
+  require_https_remote: true
+  no_redirects: true
+  secret_storage: os_keyring_or_env
+  redact_response_logging: true

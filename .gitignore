@@ -50,3 +50,14 @@ logs/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Additional V5.1 local caches and private configuration
+.mypy_cache/
+.ruff_cache/
+**/*secret*.json
+**/*secret*.yaml
+**/auth_token*
+local_state/
+release/
+*.pamos-*.json
+*.bundle

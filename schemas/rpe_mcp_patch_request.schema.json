@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PAMOs RPE MCP Patch Proposal Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "session_id",
+    "project_id",
+    "expected_revision",
+    "chart_mode",
+    "format_adapter",
+    "operations",
+    "noise_write_enabled"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "5.0.0"
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "project_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "expected_revision": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 128
+    },
+    "chart_mode": {
+      "enum": [
+        "regular",
+        "pure_keys",
+        "anomaly"
+      ]
+    },
+    "format_adapter": {
+      "enum": [
+        "rpe_original",
+        "rpe_next"
+      ]
+    },
+    "key_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "enum": [
+        4,
+        5,
+        6,
+        null
+      ]
+    },
+    "noise_write_enabled": {
+      "const": false
+    },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 12,
+      "items": {
+        "$ref": "llm_patch.schema.json"
+      }
+    },
+    "context": {
+      "type": "object",
+      "maxProperties": 16
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "chart_mode": {
+            "const": "pure_keys"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "key_count"
+        ]
+      }
+    }
+  ]
+}

@@ -2,10 +2,10 @@
 
 **目标仓库**：`https://github.com/vaseft/PhiAiMadeOs.git`（`vaseft/PhiAiMadeOs`）。`main` 为稳定分支，`develop` 为集成分支。
 
-> 仓库目前是**初始化骨架**。完整 V5.1 Agent Kit 尚未全部导入；不能假设后端、训练模型、实时 RPE MCP、前端页面已经存在。
+> **当前分支已导入用户原 V5.1 Agent Kit 的开发文档和离线 MCP 原型。** 源码导入与测试结果分开报告；完整后端、训练模型、实时编辑器桥接、非 AI 音频审计和人工审核页面仍需后续开发与验收。
 
 ## 每次会话固定操作流程（必须执行）
-1. 读取仓库 `AGENTS.md`、`docs/32_VERSION_CONTROL_POLICY.md`、`CHANGELOG.md`、本文件。若 V5.1 Kit 已导入，继续读取 `CODEX_V51_START_HERE.md` 和与当前任务相关的设计与 Schema。
+1. 读取仓库 `AGENTS.md`、`docs/32_VERSION_CONTROL_POLICY.md`、`CHANGELOG.md`、本文件。继续读取 `docs/AGENT_V51_DEVELOPMENT.md`、`CODEX_V51_START_HERE.md` 和与当前任务相关的设计与 Schema。原包 V3/V4 启动技术清单保留在 `docs/legacy/CODEX_V3_START_HERE.md`，不覆盖现有规则。
 2. 检查 Git：`git remote -v`、`git status -sb`、`git branch -vv`、`git log -5 --oneline --decorate`。**不得在不知工作区是否有用户改动的情况下 reset/clean**。
 3. `git fetch origin` 后以最新 `origin/develop` 创建合适的 `feature/`、`fix/` 或 `docs/` 分支。若工作区有未提交修改，先保护或说明，不要覆盖。
 4. 实施小步功能，按功能单元添加测试和文档，每个可验证阶段一次 Conventional Commit。修改代码之前先检查依赖许可证、数据来源与 8GB 显存/16GB 内存限制。
@@ -23,7 +23,7 @@
 - LLM/MCP 每次修改谱面之前必须 snapshot + expected hash + diff + 审批；不得直接覆盖原始谱面；写入操作可回滚。
 - 追踪 **代码 Git SHA / 谱面 revision / 模型 run_id+权重 hash / 提示词版本 / 上游依赖 SHA**，不能互相混同。
 
-## 首个待办
-将用户的 `PhiAiMadeOs V5.1 Agent Kit` 的完整文件导入开发分支（排除内部 `.git`、`__pycache__` 和临时数据），审核同名文件与许可证，确保测试可复现，再分 PR 建立离线 RPE MCP、RPE Next 实时桥接、训练服务、非 AI 审计与人工审核 UI。
+## 当前阶段与后续任务
+先核对导入文件、排除资产、同名文件整合与依赖许可，运行现有 CPU 合约及单元测试。`pamos_mcp/core.py` 是共同 RPE JSON/PEZ 输入与独立候选 JSON 编辑原型；不等于完整双方言无损转换器或实时编辑器。本次 Windows / Python 3.12 / mcp 2.3.0 的真实 stdio 测试已验证 8 个工具及无审批提交拒绝，见 `tests/test_stdio_mcp.py`；这不替代实时桥接与客户端验收。后续分别开 PR 完善格式适配、Live Bridge、训练服务、非 AI 审计与人工审核 UI。
 
-**禁止**在只有仓库骨架时宣称“模型已训练好”“RPE MCP 已实时连接”“谱面已在 Phira-Pro 中试玩成功”。
+**禁止**以开发包导入、离线单测或 CI 通过为由宣称“模型已训练好”“RPE MCP 已实时连接”“谱面已在 Phira-Pro 中试玩成功”。没有执行对应验收时必须写 `NOT RUN`。

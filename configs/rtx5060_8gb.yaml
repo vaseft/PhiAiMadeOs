@@ -1,0 +1,98 @@
+# RTX 5060 8GB VRAM / 16GB host RAM. SAFE STARTING PROFILE, NOT GUARANTEED.
+project:
+  name: PhiAiMadeOs
+  mode: single_gpu_low_ram
+  locale: zh-CN
+  seed: 20261024
+hardware:
+  preferred_device: cuda
+  gpu_budget_reserved_gib: 6.2
+  cpu_process_rss_budget_gib: 6.0
+  preflight_required: true
+  block_concurrent_gpu_jobs: true
+  single_api_worker: true
+  no_docker_required: true
+  no_redis_required: true
+features:
+  sample_rate: 22050
+  mono: true
+  mel_bins: 80
+  feature_frame_rate_hz: 25
+  storage_dtype: float16
+  use_mmap: true
+  extract_on_cpu: true
+  streaming_one_song_at_a_time: true
+  use_large_audio_encoder_during_training: false
+training:
+  train_stages_sequentially: [note_rhythm, line_motion, placement]
+  optimizer: adamw
+  model_dtype: auto_amp_bf16_else_fp16
+  micro_batch_size: 1
+  gradient_accumulation_steps: 16
+  dataloader_num_workers: 0
+  dataloader_pin_memory: false
+  persistent_workers: false
+  max_audio_frames: 384
+  base_note_slots: 192
+  max_note_slots: 256
+  max_motion_events: 64
+  max_active_lines: 8
+  center_window_bars: 4
+  context_bars_each_side: 1
+  gradient_clip_norm: 1.0
+  learning_rate: 0.0002
+  weight_decay: 0.01
+  scheduler: warmup_cosine
+  warmup_ratio: 0.05
+  early_stopping_patience: 8
+  save_best: true
+  save_last: true
+  resume_training_state: true
+  activation_checkpointing: false
+  torch_compile: false
+  input_overflow_policy: split_and_report
+  oom_policy: stop_and_profile_again
+models:
+  note_rhythm:
+    audio_layers: 2
+    decoder_layers: 4
+    d_model: 192
+    n_heads: 4
+    ffn_dim: 768
+    dropout: 0.1
+  line_motion:
+    decoder_layers: 3
+    d_model: 192
+    n_heads: 4
+    ffn_dim: 768
+    max_prototypes: 64
+  placement:
+    decoder_layers: 3
+    d_model: 192
+    n_heads: 4
+    ffn_dim: 768
+inference:
+  run_each_model_sequentially: true
+  segment_overlap_bars: 1
+  max_lines: 8
+  validate_beat_seconds_after_stitch: true
+  allow_safe_line_template_fallback: true
+audit:
+  use_neural_network: false
+  cpu_only: true
+  run_between_generation_and_human_review: true
+review:
+  require_manual_rating: true
+  require_playtest_evidence_for_verified: true
+
+# V3：保留 V2 三段模型并在纯配置模式单独训练小型 K-lane head。
+v3:
+  generation_config: configs/generation_v3.yaml
+  pure_keys_line_motion: disabled_always
+  pure_keys_key_counts: [4, 5, 6]
+  train_key_lane_head_separately: true
+  lane_head_d_model: 192
+  lane_head_decoder_layers: 3
+  require_real_lane_training_samples: true
+  insufficient_data_fallback: baseline_only_with_visible_label
+  max_gpu_models_at_once: 1

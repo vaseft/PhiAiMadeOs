@@ -1,0 +1,2 @@
+# MCP SDK v2, isolated from the model-training requirements
+mcp>=2,<3

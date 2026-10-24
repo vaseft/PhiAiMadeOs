@@ -1,0 +1,38 @@
+# V5 目标架构，非当前能力声明；实时桥接和双格式导出尚未实现。
+# 可运行的离线原型见 codex_mcp_v51.example.toml 和 docs/31。
+version: 5
+project: PhiAiMadeOs
+mcp:
+  server_name: pamos-rpe
+  transport: stdio
+  start_command: "python -m phiaimadeos.mcp_server"  # requires implementation
+  readonly_default: true
+  require_ui_approval_to_write: true
+  max_objects_per_response: 300
+  max_operation_count: 12
+  live_editor_enabled_default: false
+  project_roots:
+    - "${PAMOS_DATA_ROOT}"
+bridge:
+  bind: 127.0.0.1
+  ws_port: 4174  # engineering default proposal, ensure availability
+  require_user_pairing: true
+  pairing_token_location: memory_only
+  allowed_origins:
+    - http://127.0.0.1:4173
+    - http://localhost:4173
+  reject_remote_clients: true
+  editor_api: rpe-next-mod-api-1
+  rpe_next_version_observed: 0.12.2
+formats:
+  import: [rpe_original_json, rpe_original_pez, rpe_next_json, rpe_next_pez]
+  export: [rpe_original_json, rpe_original_pez, rpe_next_json, rpe_next_pez]
+  default_lossy_export: block
+noise_area:
+  auto_generate: false
+  llm_write: false
+  mcp_write: false
+  preserve_read_only: true
+model:
+  first_generation_train_noise: false
+  target_rtx5060_vram_gb: 8

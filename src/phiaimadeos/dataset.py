@@ -132,7 +132,7 @@ def build_manifest(samples, output_dir, seed=42):
             if has_noise(chart):
                 raise ValueError("噪域只读，V1 禁止将含噪域样本加入训练")
             chart_digest, feature_digest = _sha_file(chart_path), _sha_file(feature_path)
-            if item.get("chart_sha256") not in (None, chart_digest, chart_hash(chart)):
+            if item.get("chart_sha256") not in (None, chart_digest) and item["chart_sha256"] != chart_hash(chart):
                 raise ValueError("chart_sha256 与当前文件不一致")
             if item.get("feature_sha256") not in (None, feature_digest):
                 raise ValueError("feature_sha256 与当前特征不一致")

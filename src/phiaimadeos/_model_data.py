@@ -282,7 +282,8 @@ def load_song(root: Path, sample: dict, *, max_lines=MAX_LINES):
             raise ModelError("DATA_HASH_MISMATCH", "数据文件内容与 manifest 哈希不符。", chart_id=sample.get("chart_id"))
         sample[key] = actual_hash
     chart = formats.read_chart(chart_path)
-    if sample.get("chart_sha256") not in (None, sample["chart_file_sha256"], formats.chart_hash(chart)):
+    if (sample.get("chart_sha256") not in (None, sample["chart_file_sha256"])
+            and sample["chart_sha256"] != formats.chart_hash(chart)):
         raise ModelError("DATA_HASH_MISMATCH", "谱面规范化哈希与 manifest 不一致。")
     if formats.has_noise(chart):
         raise ModelError("NOISE_TRAINING_FORBIDDEN", "含实际噪域的数据不得用于训练。")

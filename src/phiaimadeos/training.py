@@ -300,7 +300,26 @@ def run_training(request: dict, project_root, progress=None, pause_requested=Non
     model_config("line_motion", max_lines)
     cache = SongCache(root, samples, max_lines=max_lines)
     _emit(progress, phase="indexing", progress=0.01, message="核对完整标签与窗口容量。")
-    windows, window_report = build_windows(cache)
+    import psutil
+    largest_source = max(safe_path(root, sample["chart_path"]).stat().st_size for sample in samples)
+    prepare_budget = max(3 * 1024 ** 3, 2 * (largest_source * 24 + 256 * 1024 ** 2))
+    prepare_workers = 2 if psutil.virtual_memory().available >= prepare_budget else 1
+    cache_hits, cache_misses = 0, 0
+    def index_progress(done, total, cached):
+        nonlocal cache_hits, cache_misses
+        cache_hits += int(bool(cached.get("hit")))
+        cache_misses += int(not cached.get("hit"))
+        _emit(progress, phase="indexing", progress=.01 + .015 * done / total,
+              message=f"CPU准备训练窗口 {done}/{total}：缓存{cache_hits}份，新解析{cache_misses}份，{prepare_workers}路准备。")
+    windows, window_report = build_windows(cache, progress=index_progress, check_pause=check_pause, workers=prepare_workers)
+    # Full projection operations stay in an immutable, SHA-bound local artifact;
+    # repeatedly rewriting them in the run manifest would stall large corpora.
+    for row in window_report:
+        artifact = row.get("preparation_cache") or {}
+        if artifact.get("path"):
+            projection = row["training_projection"]
+            row["training_projection"] = {key: projection[key] for key in ("version", "sha256", "chart_file_sha256", "source_unchanged", "notes_preserved", "source_events", "projected_events")}
+            row["training_projection"].update(operations_count=len(projection["operations"]), artifact_path=artifact["path"], artifact_payload_sha256=artifact["sha256"])
     check_pause()
     if stage in ("all", "note_rhythm", "placement"):
         for split in ("train", "val"):
@@ -349,7 +368,7 @@ def run_training(request: dict, project_root, progress=None, pause_requested=Non
     amp_enabled = device.type == "cuda"
     environment = _environment(torch, device, root)
     environment["source_sha256"] = {name: file_hash(Path(__file__).with_name(name))
-                                     for name in ("models.py", "_model_data.py", "_training_batch.py", "training.py", "training_sources.py", "inference.py", "formats.py", "audio.py")}
+                                     for name in ("models.py", "_model_data.py", "_training_batch.py", "_training_cache.py", "training.py", "training_sources.py", "inference.py", "formats.py", "audio.py")}
     config["device"] = str(device)
     config["precision"] = "bf16" if amp_enabled and amp_dtype == torch.bfloat16 else "fp16" if amp_enabled else "fp32"
     config_sha = canonical_hash(config)
@@ -415,6 +434,7 @@ def run_training(request: dict, project_root, progress=None, pause_requested=Non
                 "stages": {name: {key: info[key] for key in ("checkpoint_path", "checkpoint_sha256", "config", "feature_version", "motion_dictionary") if key in info}
                            for name, info in warm_parent["stages"].items()}}
     record["training_state"] = "running"
+    record["preparation"] = {"workers": prepare_workers, "cache_hits": cache_hits, "cache_misses": cache_misses}
     record["job_id"] = request.get("job_id")
     _atomic_json(run_path, record)
     _emit(progress, run_id=run_id, phase="training_ready", progress=0.03,

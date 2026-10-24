@@ -272,6 +272,11 @@ def _project_track(source_events, line, prop, duration, tempo, offset, source_pr
 
 
 def load_song(root: Path, sample: dict, *, max_lines=MAX_LINES):
+    from ._training_cache import load
+    return load(root, sample, max_lines, _load_song_uncached)
+
+
+def _load_song_uncached(root: Path, sample: dict, *, max_lines=MAX_LINES):
     from . import formats
     motion_capacity(max_lines)
     chart_path = safe_path(root, sample["chart_path"])
@@ -417,36 +422,89 @@ def select_events(song, window):
     return [e for e in song["events"] if window.start <= e["time"] < window.end]
 
 
-def build_windows(cache: SongCache):
+def _song_windows(song, sample, max_lines, sample_index):
+    windows = []
+    count, splits = 0, 0
+
+    def add(start, end, depth=0):
+        nonlocal count, splits
+        window = Window(sample_index, start, end)
+        notes, events = select_notes(song, window), select_events(song, window)
+        bins = [0] * TIME_CELLS
+        for note in notes:
+            bins[min(TIME_CELLS - 1, int((note["time"] - start) / (end - start) * TIME_CELLS))] += 1
+        frames = min(len(song["features"]), math.ceil(end * FEATURE_RATE - 1e-8)) - max(0, math.floor(start * FEATURE_RATE + 1e-8))
+        if len(notes) > MAX_NOTE_SLOTS or len(events) > motion_capacity(max_lines) or max(bins) > VOICES or frames > MAX_AUDIO_FRAMES:
+            if depth >= 24 or end - start < 1e-5:
+                raise ModelError("DENSITY_UNSUPPORTED", "同时事件超出模型容量，拆窗仍不能完整表示；未丢标签。", chart_id=sample.get("chart_id"))
+            splits += 1
+            mid = (start + end) / 2
+            add(start, mid, depth + 1)
+            add(mid, end, depth + 1)
+        else:
+            windows.append(window)
+            count += 1
+
+    for frame in range(0, len(song["features"]), MAX_AUDIO_FRAMES):
+        add(frame / FEATURE_RATE, min(len(song["features"]), frame + MAX_AUDIO_FRAMES) / FEATURE_RATE)
+    return windows, {"chart_id": sample.get("chart_id"), "group_id": sample["group_id"], "split": sample["split"],
+        "windows": count, "additional_splits": splits, "notes": len(song["notes"]), "motion_events": len(song["events"]),
+        "parser_warnings": song["parser_warnings"], "training_projection": song["training_projection"], "preparation_cache": song.get("_cache")}
+
+
+def _index_song(root, sample, max_lines):
+    song = load_song(Path(root), sample, max_lines=max_lines)
+    windows, report = _song_windows(song, sample, max_lines, 0)
+    report["_verified_input_hashes"] = {key: sample[key] for key in ("chart_file_sha256", "feature_sha256")}
+    return [(w.start, w.end) for w in windows], report
+
+
+def build_windows(cache: SongCache, *, progress=None, check_pause=None, workers=1):
+    if workers > 1 and isinstance(cache, SongCache):
+        from concurrent.futures import ProcessPoolExecutor, wait, FIRST_COMPLETED
+        import multiprocessing
+        # At most two parsed songs exist outside the parent. Workers never load
+        # torch/CUDA or any held-out charts, and results retain manifest order.
+        pool = ProcessPoolExecutor(max_workers=min(2, workers), mp_context=multiprocessing.get_context("spawn"))
+        pending, results, next_index, completed = {}, {}, 0, 0
+        keys = ("chart_id", "group_id", "split", "chart_path", "feature_path", "chart_file_sha256", "chart_sha256", "feature_sha256", "conditions")
+        try:
+            while completed < len(cache.samples):
+                if check_pause:
+                    check_pause()
+                while next_index < len(cache.samples) and len(pending) < min(2, workers):
+                    sample = {key: cache.samples[next_index].get(key) for key in keys}
+                    future = pool.submit(_index_song, str(cache.root), sample, cache.max_lines)
+                    pending[future] = next_index
+                    next_index += 1
+                done, _ = wait(pending, timeout=.25, return_when=FIRST_COMPLETED)
+                for future in done:
+                    index = pending.pop(future)
+                    results[index] = future.result()
+                    completed += 1
+                    if progress:
+                        progress(completed, len(cache.samples), results[index][1].get("preparation_cache") or {})
+            windows, report = [], []
+            for index in range(len(cache.samples)):
+                values, row = results.pop(index)
+                cache.samples[index].update(row.pop("_verified_input_hashes"))
+                windows.extend(Window(index, start, end) for start, end in values)
+                report.append(row)
+            return windows, report
+        finally:
+            for future in pending:
+                future.cancel()
+            pool.shutdown(wait=True, cancel_futures=True)
     windows, report = [], []
     for index, sample in enumerate(cache.samples):
+        if check_pause:
+            check_pause()
         song = cache.get(index)
-        count, splits = 0, 0
-
-        def add(start, end, depth=0):
-            nonlocal count, splits
-            window = Window(index, start, end)
-            notes, events = select_notes(song, window), select_events(song, window)
-            bins = [0] * TIME_CELLS
-            for note in notes:
-                bins[min(TIME_CELLS - 1, int((note["time"] - start) / (end - start) * TIME_CELLS))] += 1
-            frames = min(len(song["features"]), math.ceil(end * FEATURE_RATE - 1e-8)) - max(0, math.floor(start * FEATURE_RATE + 1e-8))
-            if len(notes) > MAX_NOTE_SLOTS or len(events) > motion_capacity(cache.max_lines) or max(bins) > VOICES or frames > MAX_AUDIO_FRAMES:
-                if depth >= 24 or end - start < 1e-5:
-                    raise ModelError("DENSITY_UNSUPPORTED", "同时事件超出模型容量，拆窗仍不能完整表示；未丢标签。", chart_id=sample.get("chart_id"))
-                splits += 1
-                mid = (start + end) / 2
-                add(start, mid, depth + 1)
-                add(mid, end, depth + 1)
-            else:
-                windows.append(window)
-                count += 1
-
-        for frame in range(0, len(song["features"]), MAX_AUDIO_FRAMES):
-            add(frame / FEATURE_RATE, min(len(song["features"]), frame + MAX_AUDIO_FRAMES) / FEATURE_RATE)
-        report.append({"chart_id": sample.get("chart_id"), "group_id": sample["group_id"], "split": sample["split"],
-                       "windows": count, "additional_splits": splits, "notes": len(song["notes"]), "motion_events": len(song["events"]),
-                       "parser_warnings": song["parser_warnings"], "training_projection": song["training_projection"]})
+        values, row = _song_windows(song, sample, cache.max_lines, index)
+        windows.extend(values)
+        report.append(row)
+        if progress:
+            progress(index + 1, len(cache.samples), song.get("_cache") or {})
     return windows, report
 
 

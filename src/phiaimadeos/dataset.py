@@ -192,7 +192,6 @@ def build_manifest(samples, output_dir, seed=42):
             else:
                 identities[key] = item["group_id"]
     groups = sorted({find(item["group_id"]) for item in prepared})
-    random.Random(int(seed)).shuffle(groups)
     count = len(groups)
     if count >= 3:
         validation_count = max(1, round(count * 0.1))
@@ -202,8 +201,17 @@ def build_manifest(samples, output_dir, seed=42):
     else:
         validation_count = test_count = 0
     training_count = count - validation_count - test_count
-    assignments = {group: ("train" if index < training_count else "val" if index < training_count + validation_count else "test")
-                   for index, group in enumerate(groups)}
+    if count < 10:
+        # Tiny corpora keep the historical allocation with explicit warnings.
+        random.Random(int(seed)).shuffle(groups)
+        assignments = {group: ("train" if index < training_count else "val" if index < training_count + validation_count else "test")
+                       for index, group in enumerate(groups)}
+        split_version = "song-union-shuffle-80-10-10-v1"
+    else:
+        # Membership must not change when more eligible charts arrive. The
+        # ratios are probabilities, rather than exact population quotas.
+        assignments = {group: stable_group_split(group, seed) for group in groups}
+        split_version = "song-union-hash-80-10-10-v2"
     warnings = ["按已记录歌曲簇与精确音频身份联合拆分；自动导出身份/有序chroma分组不保证识别全部变速与重混版本",
                 "训练/GPU/独立锁定测试集评估 NOT RUN"]
     if count < 10:
@@ -217,7 +225,7 @@ def build_manifest(samples, output_dir, seed=42):
     identifier = uuid.uuid4().hex
     manifest = {"id": identifier, "version": MANIFEST_VERSION, "created_at": datetime.now(timezone.utc).isoformat(),
                 "feature_version": FEATURE_VERSION, "sample_rate": 22050, "hop": 882, "feature_dim": 104,
-                "seed": int(seed), "split_version": "song-union-shuffle-80-10-10-v1", "samples": prepared,
+                "seed": int(seed), "split_version": split_version, "samples": prepared,
                 "group_count": count, "split_counts": {split: sum(item["split"] == split for item in prepared) for split in ("train", "val", "test")},
                 "warnings": warnings, "sha256_scope": "canonical manifest excluding sha256 and manifest_path"}
     manifest["sha256"] = hashlib.sha256(canonical_bytes(manifest)).hexdigest()
@@ -227,3 +235,8 @@ def build_manifest(samples, output_dir, seed=42):
     with path.open("x", encoding="utf-8") as stream:
         json.dump(manifest, stream, ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False)
     return manifest
+
+
+def stable_group_split(group, seed=42):
+    value = int.from_bytes(hashlib.sha256(f"{seed}:{group}".encode("utf-8")).digest()[:8], "big")
+    return "train" if value < (4 * 2 ** 64 // 5) else "val" if value < (9 * 2 ** 64 // 10) else "test"

@@ -93,6 +93,16 @@ class Store:
             rows = db.execute("SELECT payload FROM records WHERE kind=? ORDER BY created_at DESC", (kind,)).fetchall()
         return [json.loads(r[0]) for r in rows]
 
+    def counts(self, kinds):
+        # Counting records must not deserialize every candidate/model payload.
+        kinds = tuple(kinds)
+        if not kinds:
+            return {}
+        with self.connection() as db:
+            rows = db.execute(f"SELECT kind,COUNT(*) FROM records WHERE kind IN ({','.join('?' for _ in kinds)}) GROUP BY kind", kinds).fetchall()
+        values = dict(rows)
+        return {kind: values.get(kind, 0) for kind in kinds}
+
     def update(self, kind, record_id, changes, expected=None):
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")

@@ -119,11 +119,17 @@ def create_app():
         response.set_cookie("pamos_session", session, httponly=True, samesite="strict", secure=False)
         return response
 
+    @app.get("/api/v1/health")
+    async def health():
+        # Readiness is independent of corpus size, historical jobs or GPU use.
+        return {"ready": True, "root": str(settings.root), "version": __version__,
+                "trainer_protocol": 2, "features": {"trainer_runtime": True}}
+
     @app.get("/api/v1/status")
-    async def status():
+    def status():
         hardware_path = settings.root / "runs/environment.json"
         hardware = json.loads(hardware_path.read_text(encoding="utf-8")) if hardware_path.exists() else {"status": "NOT MEASURED"}
-        return {"version": __version__, "counts": {k: len(store.list(k)) for k in ("assets", "charts", "candidates", "datasets", "models")}, "hardware": hardware, "jobs": store.list("jobs"),
+        return {"version": __version__, "counts": store.counts(("assets", "charts", "candidates", "datasets", "models")), "hardware": hardware, "jobs": store.list("jobs"),
             "capabilities": capabilities(), "verification": "本轮未运行测试；功能代码待验收", "root": str(settings.root)}
 
     @app.get("/api/v1/capabilities")

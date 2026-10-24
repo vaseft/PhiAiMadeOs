@@ -2,7 +2,7 @@
 
 **用于 Phira-Pro 的 AI 音游谱面生成、校验、编辑与人工审核系统。**
 
-> **V5.1 开发包与 Windows 环境已整合到 develop；本功能分支增加本地工作台 alpha 源码。** 包含数据、DSP、规则生成、小模型训练/推理、独立审计、人工审核、版本修订、导出与编辑器模组。按用户本轮要求没有新增或主动运行测试；代码实现、生产打包、真实训练与客户端验收分别记录，尚不构成稳定产品或已训练模型。
+> **V5.1 开发包与 Windows 环境已整合到 develop；本功能分支增加本地工作台 alpha 源码。** 包含数据、DSP、规则生成、小模型训练/推理、独立审计、人工审核、版本修订、导出与编辑器模组。按用户本轮要求没有新增或主动运行测试；代码实现、生产打包、真实训练与客户端验收分别记录，尚不构成稳定产品或已验收模型。
 
 Windows 已部署目录可双击 `Start-PAMOs.cmd`，在 `http://127.0.0.1:8765` 使用本机工作台。恢复依赖与界面构建使用 `Install-PAMOs.cmd`。参见 [本地工作台使用与边界](docs/35_LOCAL_WORKBENCH.md)、[本轮交付记录](docs/36_WORKBENCH_DELIVERY.md) 和 [Windows 环境](docs/34_WINDOWS_ENVIRONMENT.md)。
 
@@ -10,7 +10,7 @@ Windows 已部署目录可双击 `Start-PAMOs.cmd`，在 `http://127.0.0.1:8765`
 
 用户另行确认当前批次训练授权和游戏导出来源后，可执行 [本地训练数据准备](docs/LOCAL_TRAINING_PREPARATION.md)：保留人工听音状态、检查来源哈希和时钟、歌曲簇拆分并登记实验初训队列。实际训练结果与尚未完成的验收分别记录。
 
-已完成的24曲、三阶段各1轮RTX5060实验见 [首次本地训练记录](docs/38_INITIAL_LOCAL_TRAINING.md)。结果保持experimental；用户当前要求暂停后续GPU训练，待明确恢复再继续。
+24曲RTX5060实验已完成三阶段各2轮：见 [首次本地训练](docs/38_INITIAL_LOCAL_TRAINING.md) 和 [第2轮断点续训](docs/39_SECOND_EPOCH.md)。结果保持experimental；每次只执行用户明确委托的轮数，不自动持续训练。
 
 ## 产品目标
 

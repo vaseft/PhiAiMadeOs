@@ -442,6 +442,8 @@ def create_app():
                     record["job_status"] = job["status"]
                     if job["status"] in {"cancelled", "interrupted", "failed"}:
                         record["display_state"] = job["status"]
+                        record["checkpoint_training_state"] = record.get("training_state")
+                        record["training_state"] = job["status"]
                 indexed[record.get("run_id", record["id"])] = record
             except (ValueError, OSError, KeyError):
                 continue

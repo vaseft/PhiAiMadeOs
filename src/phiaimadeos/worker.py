@@ -101,7 +101,8 @@ def perform(kind, request, progress, store, secret):
         output = settings.data_dir / "datasets" / identifier
         manifest = build_manifest(samples, output, seed=request.get("seed", 42))
         manifest_path = settings.path(manifest["manifest_path"])
-        record = store.put("datasets", {"id": identifier, "manifest_path": settings.relative(manifest_path), "sha256": file_hash(manifest_path), "sample_count": len(samples), "manifest": manifest}, immutable=True)
+        record = store.put("datasets", {"id": identifier, "manifest_path": settings.relative(manifest_path), "sha256": file_hash(manifest_path), "sample_count": len(samples), "manifest": manifest,
+            "version": manifest.get("version"), "group_count": manifest.get("group_count"), "split_counts": manifest.get("split_counts"), "feature_version": manifest.get("feature_version")}, immutable=True)
         return {"dataset_id": record["id"]}
     if kind == "training":
         from .training import run_training

@@ -48,7 +48,7 @@ async function uploadChart() {
 }
 function editRecord(record: RecordData, kind: string) {
   edit.value = record; editKind.value = kind
-  Object.assign(editor, { license_status: record.license_status || 'unknown', allowed_actions: [...(record.allowed_actions || [])], source_reference: record.source_reference || '', music_asset_id: record.music_asset_id || '', chart_mode: record.chart_mode || 'regular', key_count: record.key_count || 4, difficulty_class: record.difficulty_class || '', difficulty_value: record.difficulty_value ?? '', human_verified_alignment: record.human_verified_alignment === true, group_id: record.group_id || '', performance_intensity: record.chart_mode === 'pure_keys' ? 0 : record.performance_intensity ?? '', performance_style: record.chart_mode === 'pure_keys' ? 'none' : record.performance_style ?? '', wildness: record.wildness ?? '' })
+  Object.assign(editor, { license_status: record.license_status || 'unknown', allowed_actions: [...(record.allowed_actions || [])], source_reference: record.source_reference || '', music_asset_id: record.music_asset_id || '', chart_mode: record.chart_mode || 'regular', key_count: record.key_count || 4, difficulty_class: record.difficulty_class || '', difficulty_value: record.difficulty_value ?? '', human_verified_alignment: record.human_verified_alignment === true, group_id: record.group_method === 'exact_audio_bytes_only' ? '' : record.group_id || '', performance_intensity: record.chart_mode === 'pure_keys' ? 0 : record.performance_intensity ?? '', performance_style: record.chart_mode === 'pure_keys' ? 'none' : record.performance_style ?? '', wildness: record.wildness ?? '' })
 }
 function labelModeChanged() {
   editor.performance_intensity = editor.chart_mode === 'pure_keys' ? 0 : ''

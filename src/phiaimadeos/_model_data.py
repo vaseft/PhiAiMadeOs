@@ -74,6 +74,8 @@ def read_manifest(path: Path, root: Path):
         if not isinstance(sample, dict):
             raise ModelError("INVALID_MANIFEST", "manifest sample 必须是对象。")
         group, split = sample.get("group_id"), sample.get("split")
+        if sample.get("group_method") == "exact_audio_bytes_only":
+            raise ModelError("SONG_GROUP_UNCONFIRMED", "精确音频去重尚未经过人工歌曲簇确认，不能用于训练划分。")
         if not group or split not in ("train", "val", "test"):
             raise ModelError("INVALID_SPLIT", "每条样本必须有歌曲簇 group_id 和 train/val/test 划分。")
         if group in groups and groups[group] != split:

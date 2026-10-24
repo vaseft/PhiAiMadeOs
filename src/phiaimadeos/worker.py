@@ -80,7 +80,7 @@ def perform(kind, request, progress, store, secret):
                     raise ValueError("所有音乐与谱面都需要独立、明确的训练授权")
             if not chart.get("human_verified_alignment"):
                 raise ValueError("训练前需人工确认音乐绑定和 offset 对齐")
-            if not str(chart.get("group_id", "")).strip():
+            if not str(chart.get("group_id") or "").strip() or chart.get("group_method") == "exact_audio_bytes_only":
                 raise ValueError("训练前请填写歌曲簇 group_id；同曲转码、裁切和不同难度必须同组")
             ranges = {"EZ": (0, 10), "HD": (11, 14), "IN": (14, 17), "AT": (15, 18)}
             bounds = ranges.get(chart.get("difficulty_class"))
@@ -97,7 +97,7 @@ def perform(kind, request, progress, store, secret):
             samples.append({"chart_id": chart["id"], "music_asset_id": asset["id"], "chart_path": chart["path"], "feature_path": settings.relative(analysis["feature_path"]),
                 "audio_sha256": asset["sha256"], "music_sha256": asset["sha256"], "chart_sha256": chart["sha256"], "group_id": chart["group_id"], "conditions": conditions,
                 "license_status": "explicit_permitted", "allowed_actions": ["training"], "feature_version": analysis["feature_version"], "analysis": analysis,
-                "human_verified_alignment": True, "source_type": chart.get("source_type"), "audio_fingerprint": analysis.get("audio_fingerprint"), "duration_s": analysis.get("duration_s")})
+                "human_verified_alignment": True, "group_method": chart.get("group_method"), "source_type": chart.get("source_type"), "audio_fingerprint": analysis.get("audio_fingerprint"), "duration_s": analysis.get("duration_s")})
             progress({"progress": (index + 1) / max(1, len(charts)), "message": f"已处理 {index + 1}/{len(charts)} 个授权样本"})
         identifier = new_id()
         output = settings.data_dir / "datasets" / identifier

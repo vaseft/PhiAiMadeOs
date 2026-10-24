@@ -94,6 +94,8 @@ def build_manifest(samples, output_dir, seed=42):
             group = item.get("group_id", item.get("song_group_id"))
             if not isinstance(group, str) or not group.strip():
                 raise ValueError("必须明确给出歌曲簇 group_id，不能按谱面随机拆分")
+            if item.get("group_method") == "exact_audio_bytes_only":
+                raise ValueError("精确音频去重不等于人工歌曲簇；请确认转码、剪辑及不同难度的同源分组")
             conditions = item["conditions"]
             if not isinstance(conditions, dict):
                 raise ValueError("conditions 必须为完整标签对象")

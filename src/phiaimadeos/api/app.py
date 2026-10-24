@@ -253,8 +253,13 @@ def create_app():
             raise ValueError("演出风格标签无效")
         if value.get("chart_mode") == "pure_keys" and (value.get("performance_intensity") not in {None, 0} or value.get("performance_style") not in {None, "none"}):
             raise ValueError("固定 K 的已知演出标签必须为 0 / none")
+        if "group_id" in payload and isinstance(payload["group_id"], str):
+            payload["group_id"] = payload["group_id"].strip() or None
+            value["group_id"] = payload["group_id"]
         if value.get("group_id") is not None and (not isinstance(value["group_id"], str) or not 1 <= len(value["group_id"].strip()) <= 256):
             raise ValueError("歌曲簇 ID 需要 1..256 个字符")
+        if "group_id" in payload and payload["group_id"] != previous.get("group_id"):
+            payload["group_method"] = "human_song_cluster" if payload["group_id"] else None
         record = store.update("charts", chart_id, {**payload, **permission})
         store.event("chart.labels_changed", chart_id, changed_fields=sorted(payload))
         return record

@@ -6,7 +6,7 @@ const selected = ref<string[]>([]), seed = ref(42)
 const training = reactive({ dataset_id: '', stage: 'all', epochs: 10, seed: 42, device: 'cuda', grad_accum: 16, resume_run_id: '' })
 const difficultyRanges: Record<string, [number, number]> = { EZ: [0, 10], HD: [11, 14], IN: [14, 17], AT: [15, 18] }
 function hasTrainingDifficulty(chart: any) { const bounds = difficultyRanges[chart.difficulty_class || '']; return !!bounds && Number.isInteger(chart.difficulty_value) && Number(chart.difficulty_value) >= bounds[0] && Number(chart.difficulty_value) <= bounds[1] }
-const eligible = computed(() => state.charts.filter(c => c.import_status !== 'archived_only' && hasTrainingDifficulty(c) && c.license_status === 'explicit_permitted' && c.allowed_actions?.includes('training') && c.human_verified_alignment === true && !!c.music_asset_id && !!String(c.group_id || '').trim() && state.assets.some(a => a.id === c.music_asset_id && a.license_status === 'explicit_permitted' && a.allowed_actions?.includes('training'))))
+const eligible = computed(() => state.charts.filter(c => c.import_status !== 'archived_only' && hasTrainingDifficulty(c) && c.license_status === 'explicit_permitted' && c.allowed_actions?.includes('training') && c.human_verified_alignment === true && !!c.music_asset_id && c.group_method !== 'exact_audio_bytes_only' && !!String(c.group_id || '').trim() && state.assets.some(a => a.id === c.music_asset_id && a.license_status === 'explicit_permitted' && a.allowed_actions?.includes('training'))))
 const gpuBusy = computed(() => state.jobs.some(j => activeJob(j) && /train|generat|infer/.test(j.kind || j.type || '')))
 const chosenRun = ref(''), evidence = ref(''), promotion = ref('candidate')
 const promoteModel = ref('')

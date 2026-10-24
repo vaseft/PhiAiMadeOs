@@ -20,10 +20,12 @@ import time
 import uuid
 
 from .models import ARCH_VERSION, MAX_LINES, MOTION_DICTIONARY_VERSION, POSITION_X_SCALE, ModelError, build_model, model_config, set_motion_dictionary
-from ._model_data import (SongCache, batch_for, build_windows, canonical_hash, fit_motion_dictionary,
+from ._model_data import (SongCache, batch_for, canonical_hash, fit_motion_dictionary,
                           file_hash, read_manifest, relative_path, safe_path)
 from ._training_batch import (EXECUTION_VERSION, batch_executor, loss_rows, prepare_batch,
                               prepared_chunks, transfer_batch, window_chunks)
+from ._training_index import build_windows
+from .training_runtime import validate_runtime
 
 STAGES = ("note_rhythm", "line_motion", "placement")
 
@@ -114,9 +116,9 @@ def _resources(torch, device):
     return result
 
 
-def _enforce_budget(resources):
-    if (resources.get("cuda_peak_reserved_bytes") or 0) > 6.2 * 1024 ** 3:
-        raise ModelError("GPU_BUDGET_EXCEEDED", "实测峰值 reserved 显存超过 6.2 GiB 工程预算，停止本轮以保留诊断。", resources=resources)
+def _enforce_budget(resources, vram_budget_gib=6.2):
+    if (resources.get("cuda_peak_reserved_bytes") or 0) > vram_budget_gib * 1024 ** 3:
+        raise ModelError("GPU_BUDGET_EXCEEDED", f"实测峰值 reserved 显存超过设定的 {vram_budget_gib:g} GiB 预算；请降低并行窗口后从断点继续。", resources=resources)
     if (resources.get("process_rss_bytes") or 0) > 6 * 1024 ** 3:
         raise ModelError("RAM_BUDGET_EXCEEDED", "训练工作进程实测 RSS 超过 6 GiB 工程预算。", resources=resources)
 
@@ -283,10 +285,11 @@ def run_training(request: dict, project_root, progress=None, pause_requested=Non
     epochs, accumulation, seed = int(request.get("epochs", 10)), int(request.get("grad_accum", 16)), int(request.get("seed", 42))
     if not 1 <= epochs <= 10000 or not 1 <= accumulation <= 256 or not 0 <= seed < 2 ** 32:
         raise ModelError("INVALID_TRAIN_CONFIG", "epoch、梯度累积或随机种子超出允许范围。")
-    microbatch = request.get("microbatch", 1)
-    prefetch_batches = request.get("prefetch_batches", 0)
-    if type(microbatch) is not int or microbatch not in (1, 2, 4, 8, 16) or type(prefetch_batches) is not int or prefetch_batches not in (0, 1):
-        raise ModelError("INVALID_TRAIN_CONFIG", "并行窗口数须为1/2/4/8/16，预取批次数须为0或1。")
+    try:
+        runtime = validate_runtime(request)
+    except ValueError as exc:
+        raise ModelError("INVALID_TRAIN_CONFIG", str(exc)) from exc
+    microbatch, prefetch_batches = runtime["microbatch"], runtime["prefetch_batches"]
     effective_batch = microbatch * accumulation
     manifest_path = safe_path(root, request.get("manifest_path"))
     manifest, samples = read_manifest(manifest_path, root)
@@ -302,15 +305,24 @@ def run_training(request: dict, project_root, progress=None, pause_requested=Non
     _emit(progress, phase="indexing", progress=0.01, message="核对完整标签与窗口容量。")
     import psutil
     largest_source = max(safe_path(root, sample["chart_path"]).stat().st_size for sample in samples)
-    prepare_budget = max(3 * 1024 ** 3, 2 * (largest_source * 24 + 256 * 1024 ** 2))
-    prepare_workers = 2 if psutil.virtual_memory().available >= prepare_budget else 1
+    available = psutil.virtual_memory().available
+    per_worker = largest_source * 24 + 256 * 1024 ** 2
+    memory_workers = max(1, int((available - 1024 ** 3) / per_worker))
+    requested_workers = runtime["prepare_workers"] or 2
+    prepare_workers = min(requested_workers, memory_workers, os.cpu_count() or 1)
+    preparation_runtime = {"requested_workers": runtime["prepare_workers"], "actual_workers": prepare_workers,
+                           "available_ram_bytes_at_start": available, "estimated_bytes_per_worker": per_worker}
+    _emit(progress, phase="indexing", progress=.01,
+          message=f"CPU准备窗口：设定{requested_workers}路，实际{prepare_workers}路（按可用内存核对）；GPU批量{microbatch}。",
+          preparation_runtime=preparation_runtime, runtime=runtime)
     cache_hits, cache_misses = 0, 0
     def index_progress(done, total, cached):
         nonlocal cache_hits, cache_misses
         cache_hits += int(bool(cached.get("hit")))
         cache_misses += int(not cached.get("hit"))
         _emit(progress, phase="indexing", progress=.01 + .015 * done / total,
-              message=f"CPU准备训练窗口 {done}/{total}：缓存{cache_hits}份，新解析{cache_misses}份，{prepare_workers}路准备。")
+              message=f"CPU准备训练窗口 {done}/{total}：缓存{cache_hits}份，新解析{cache_misses}份，{prepare_workers}路准备。",
+              preparation_runtime=preparation_runtime, runtime=runtime)
     windows, window_report = build_windows(cache, progress=index_progress, check_pause=check_pause, workers=prepare_workers)
     # Full projection operations stay in an immutable, SHA-bound local artifact;
     # repeatedly rewriting them in the run manifest would stall large corpora.
@@ -328,6 +340,8 @@ def run_training(request: dict, project_root, progress=None, pause_requested=Non
     manifest_sha = file_hash(manifest_path)
     config = {"epochs": epochs, "seed": seed, "grad_accum": accumulation, "microbatch": microbatch, "stage": stage,
               "effective_batch_windows": effective_batch, "prefetch_batches": prefetch_batches, "execution_version": EXECUTION_VERSION,
+              "prepare_workers": runtime["prepare_workers"], "vram_budget_gib": runtime["vram_budget_gib"],
+              "schedule_position_version": "window-position-v1",
               "learning_rate": 0.0002, "weight_decay": 0.01, "gradient_clip": 1.0, "warmup_ratio": 0.05,
               "scheduler": "warmup_cosine", "checkpoint_optimizer_steps": 50,
               "loss_version": "masked-focal-ce-huber-easing-geometry-v2", "window_index_version": "adaptive-audio-domain-384-192-lines-v2",
@@ -368,7 +382,7 @@ def run_training(request: dict, project_root, progress=None, pause_requested=Non
     amp_enabled = device.type == "cuda"
     environment = _environment(torch, device, root)
     environment["source_sha256"] = {name: file_hash(Path(__file__).with_name(name))
-                                     for name in ("models.py", "_model_data.py", "_training_batch.py", "_training_cache.py", "training.py", "training_sources.py", "inference.py", "formats.py", "audio.py")}
+                                     for name in ("models.py", "_model_data.py", "_training_batch.py", "_training_cache.py", "_training_index.py", "training_runtime.py", "training.py", "training_sources.py", "inference.py", "formats.py", "audio.py")}
     config["device"] = str(device)
     config["precision"] = "bf16" if amp_enabled and amp_dtype == torch.bfloat16 else "fp16" if amp_enabled else "fp32"
     config_sha = canonical_hash(config)
@@ -390,14 +404,17 @@ def run_training(request: dict, project_root, progress=None, pause_requested=Non
             raise ModelError("RESUME_UNAVAILABLE", "该训练运行没有可恢复的元数据。")
         record = json.loads(run_path.read_text(encoding="utf-8"))
         old_config = record.get("config", {})
-        runtime_fields = {"epochs", "microbatch", "grad_accum", "effective_batch_windows", "prefetch_batches", "execution_version"}
+        runtime_fields = {"epochs", "microbatch", "grad_accum", "effective_batch_windows", "prefetch_batches", "execution_version",
+                          "prepare_workers", "vram_budget_gib", "schedule_position_version"}
         old_effective = old_config.get("microbatch", 1) * old_config.get("grad_accum", 16)
         batch_changed = (old_config.get("microbatch", 1), old_config.get("grad_accum", 16)) != (microbatch, accumulation)
-        if (batch_changed and (request.get("allow_runtime_batch_change") is not True or old_effective != effective_batch)):
-            raise ModelError("RESUME_CONTRACT_MISMATCH", "续训调批量需显式启用运行批量调整，且每次更新的有效窗口数保持不变。")
+        if batch_changed and request.get("allow_runtime_batch_change") is not True:
+            raise ModelError("RESUME_CONTRACT_MISMATCH", "续训调批量需显式启用运行批量调整。")
+        if old_effective != effective_batch and request.get("allow_effective_batch_change") is not True:
+            raise ModelError("RESUME_CONTRACT_MISMATCH", "改变每次更新的有效窗口数需用户明确保存强度设置。")
         if ({k: v for k, v in old_config.items() if k not in runtime_fields} != {k: v for k, v in config.items() if k not in runtime_fields}
                 or epochs < old_config.get("epochs", epochs)):
-            raise ModelError("RESUME_CONTRACT_MISMATCH", "恢复只允许增加epochs和保持有效批量的运行参数调整，其他配置必须一致。")
+            raise ModelError("RESUME_CONTRACT_MISMATCH", "恢复只允许增加epochs和显式调整运行强度，其他配置必须一致。")
         extend_completed = epochs > old_config["epochs"]
         accepted_config_hashes.add(record["train_config_sha256"])
         for item in record.get("resume_history", []):
@@ -408,7 +425,9 @@ def run_training(request: dict, project_root, progress=None, pause_requested=Non
                 raise ModelError("RESUME_CONTRACT_MISMATCH", "恢复配置、数据或拆分与断点不一致。", field=key)
         record.setdefault("resume_history", []).append({"created_at": _now(), "environment": environment,
                      "previous_config": old_config, "previous_train_config_sha256": record["train_config_sha256"],
-                     "runtime_batch_changed": batch_changed, "effective_batch_preserved": old_effective == effective_batch})
+                     "runtime_batch_changed": batch_changed, "effective_batch_preserved": old_effective == effective_batch,
+                     "effective_batch_change_authorized": request.get("allow_effective_batch_change") is True,
+                     "lr_position_basis": "completed_epochs_and_window_cursor", "preparation_runtime": preparation_runtime})
         record.update(config=config, train_config_sha256=config_sha)
     else:
         if warm_parent and (warm_parent["config"]["models"] != config["models"] or warm_parent["feature_extractor_version"] != samples[0]["feature_version"]):
@@ -434,7 +453,7 @@ def run_training(request: dict, project_root, progress=None, pause_requested=Non
                 "stages": {name: {key: info[key] for key in ("checkpoint_path", "checkpoint_sha256", "config", "feature_version", "motion_dictionary") if key in info}
                            for name, info in warm_parent["stages"].items()}}
     record["training_state"] = "running"
-    record["preparation"] = {"workers": prepare_workers, "cache_hits": cache_hits, "cache_misses": cache_misses}
+    record["preparation"] = {**preparation_runtime, "workers": prepare_workers, "cache_hits": cache_hits, "cache_misses": cache_misses}
     record["job_id"] = request.get("job_id")
     _atomic_json(run_path, record)
     _emit(progress, run_id=run_id, phase="training_ready", progress=0.03,
@@ -511,8 +530,11 @@ def run_training(request: dict, project_root, progress=None, pause_requested=Non
                 best_val, stale = state["best_val"], state["stale"]
                 # A previous attempt may already have extended the run config
                 # while later stages still carry checkpoints from the old target.
+                # Actual optimizer steps remain cumulative for audit. Learning
+                # rate follows the saved window cursor even after a batch change.
+                scheduler.last_epoch = start_epoch * steps_per_epoch + math.ceil(cursor / effective_batch)
                 for group, base_lr in zip(optimizer.param_groups, scheduler.base_lrs):
-                    group["lr"] = base_lr * schedule(optimizer_step)
+                    group["lr"] = base_lr * schedule(scheduler.last_epoch)
                 scheduler._last_lr = [group["lr"] for group in optimizer.param_groups]
                 _restore_rng(state["rng"], torch, np)
                 stage_info = {**previous, "training_state": "running"}
@@ -526,7 +548,8 @@ def run_training(request: dict, project_root, progress=None, pause_requested=Non
                 payload = {"stage": name, "config_sha256": config_sha, "split_sha256": split_sha, "model": model.state_dict(),
                            "optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict(), "scaler": scaler.state_dict(),
                            "rng": _rng_state(torch, np, device), "epoch": epoch, "cursor": position, "order": sample_order,
-                           "optimizer_step": optimizer_step, "best_val": best_val, "stale": stale}
+                           "optimizer_step": optimizer_step, "best_val": best_val, "stale": stale,
+                           "effective_batch_windows": effective_batch}
                 # Immutable names keep metadata and checkpoint consistent across a
                 # crash between the two separate atomic file replacements.
                 checkpoint = stage_dir / f"resume-{optimizer_step:09d}-{uuid.uuid4().hex[:8]}.pt"
@@ -606,6 +629,10 @@ def run_training(request: dict, project_root, progress=None, pause_requested=Non
                     scheduler.step()
                     optimizer_step += 1
                     cursor += group_size
+                    scheduler.last_epoch = epoch * steps_per_epoch + math.ceil(cursor / effective_batch)
+                    for lr_group, base_lr in zip(optimizer.param_groups, scheduler.base_lrs):
+                        lr_group["lr"] = base_lr * schedule(scheduler.last_epoch)
+                    scheduler._last_lr = [lr_group["lr"] for lr_group in optimizer.param_groups]
                     epoch_loss += group_loss
                     epoch_windows += group_size
                     resources = _resources(torch, device)
@@ -614,7 +641,7 @@ def run_training(request: dict, project_root, progress=None, pause_requested=Non
                                 "effective_batch_windows": effective_batch, "accumulated_windows": group_size, "loss": group_loss / group_size,
                                 "loss_components": {k: v / group_size for k, v in components.items()}, "lr": optimizer.param_groups[0]["lr"],
                                 "grad_norm_before_clip": float(grad_norm), "resources": resources})
-                    _enforce_budget(resources)
+                    _enforce_budget(resources, runtime["vram_budget_gib"])
                     if optimizer_step % config["checkpoint_optimizer_steps"] == 0:
                         save_resume(epoch, cursor, order)
                     _emit(progress, phase="training", stage=name,
@@ -647,7 +674,7 @@ def run_training(request: dict, project_root, progress=None, pause_requested=Non
                            "validation_components_window_mean": {k: sum(v) / len(v) for k, v in val_parts.items()},
                            "epoch_seconds_current_segment": time.monotonic() - started, "resources": _resources(torch, device)}
                 _append_log(log_path, metrics)
-                _enforce_budget(metrics["resources"])
+                _enforce_budget(metrics["resources"], runtime["vram_budget_gib"])
                 improved = best_val is None or val_loss < best_val
                 if improved:
                     best_val, stale = val_loss, 0

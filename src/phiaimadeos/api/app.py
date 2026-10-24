@@ -469,10 +469,10 @@ def create_app():
     @app.post("/api/v1/training/runs")
     async def training(payload: dict):
         store.get("datasets", payload.get("dataset_id"))
-        from ..training_runtime import recommended_runtime
+        from ..training_runtime import RUNTIME_KEYS, recommended_runtime, validate_runtime
         if not payload.get("resume_run_id") and "microbatch" not in payload and "grad_accum" not in payload:
             defaults = recommended_runtime(settings.root)
-            for key in ("microbatch", "grad_accum", "prefetch_batches"):
+            for key in RUNTIME_KEYS:
                 payload.setdefault(key, defaults[key])
         if payload.get("stage") not in {"note_rhythm", "line_motion", "placement", "all"}:
             raise ValueError("未知训练阶段")
@@ -480,12 +480,10 @@ def create_app():
             raise ValueError("训练轮数须为 1..1000")
         if payload.get("device", "cuda") not in {"cpu", "cuda"} or payload.get("grad_accum", 16) not in range(1, 129):
             raise ValueError("训练设备或梯度累积设置无效")
-        if type(payload.get("microbatch", 1)) is not int or payload.get("microbatch", 1) not in (1, 2, 4, 8, 16):
-            raise ValueError("每批窗口数须为1/2/4/8/16")
-        if type(payload.get("prefetch_batches", 0)) is not int or payload.get("prefetch_batches", 0) not in (0, 1):
-            raise ValueError("预取批次数须为0或1")
-        if type(payload.get("allow_runtime_batch_change", False)) is not bool:
-            raise ValueError("运行批量调整标志无效")
+        validate_runtime(payload)
+        for flag in ("allow_runtime_batch_change", "allow_effective_batch_change"):
+            if type(payload.get(flag, False)) is not bool:
+                raise ValueError("运行批量调整标志无效")
         return jobs.submit("training", payload)
 
     @app.get("/api/v1/training/runtime")
@@ -496,6 +494,10 @@ def create_app():
     @app.get("/api/v1/trainer")
     def trainer_status():
         return simple_trainer.status()
+
+    @app.post("/api/v1/trainer/runtime")
+    async def trainer_runtime(payload: dict):
+        return await simple_trainer.set_runtime(payload)
 
     @app.post("/api/v1/trainer/start")
     async def trainer_start():

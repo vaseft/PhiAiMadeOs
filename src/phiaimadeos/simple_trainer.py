@@ -9,7 +9,8 @@ import shutil
 from .jobs import GPU_KINDS
 from .settings import file_hash, new_id, now
 from .training import _atomic_json as atomic_json
-from .training_runtime import recommended_runtime
+from .training_runtime import RUNTIME_KEYS, recommended_runtime, save_runtime, validate_runtime
+from .training_telemetry import GpuTelemetry
 from .training_analysis import TrainingAnalysis
 from .training_sources import SourcePlanner, plateau_stages, read_run, PATIENCE
 
@@ -25,6 +26,7 @@ class SimpleTrainer:
         self.lock = asyncio.Lock()
         self.curves = TrainingAnalysis()
         self.sources = SourcePlanner(store)
+        self.gpu = GpuTelemetry()
 
     @staticmethod
     def _read(path, limit=8 * 1024 * 1024):
@@ -70,6 +72,9 @@ class SimpleTrainer:
         return [j for j in self.store.list("jobs") if j["status"] in ACTIVE
                 and j["kind"] in GPU_KINDS | {"training_calibration"}]
 
+    def _worker_exiting(self, run_id):
+        return any(j["id"] in self.jobs.active for j in self._related(run_id))
+
     def status(self):
         try:
             state, run, _ = self._run()
@@ -100,14 +105,22 @@ class SimpleTrainer:
             message = "本轮已完成，点击训练继续下一轮"
         if not active and state.get("auto_error"):
             message = "自动继续已停止：" + state["auto_error"]
+        if state.get("runtime_apply"):
+            message = "正在保存断点，随后按新的强度继续…"
         return {"state": status, "progress": min(1., max(0., progress)), "message": message or "可从断点继续",
+                "runtime": {"saved": recommended_runtime(self.settings.root),
+                    "active": validate_runtime(active["request"]) if active else None,
+                    "preparation": active.get("preparation_runtime") if active else None,
+                    "applying": bool(state.get("runtime_apply")), "message": state.get("runtime_message", "")},
+                "gpu": self.gpu.read(),
                 "auto_continue": bool(state.get("auto_continue")),
                 "auto_replace_source": bool(state.get("auto_replace_source")),
                 "source": {"run_id": run["run_id"], "sample_count": self.store.get("datasets", run["dataset_id"])["sample_count"],
                     "phase": len(state.get("source_history", [])) + 1, "patience": PATIENCE, "plateau_stages": plateau_stages(run)},
                 "source_history": state.get("source_history", []),
-                "can_start": not busy, "can_pause": bool(active and active["status"] in {"queued", "running"}
-                                                           and not active.get("pause_requested"))}
+                "can_start": not busy and not self._worker_exiting(run["run_id"]),
+                "can_pause": bool(state.get("runtime_apply") or (active and active["status"] in {"queued", "running"}
+                                                           and not active.get("pause_requested")))}
 
     def analysis(self, run_id=None):
         state, record, path = self._run()
@@ -122,19 +135,20 @@ class SimpleTrainer:
 
     def _prepare(self):
         state, record, run_path = self._run()
+        runtime = recommended_runtime(self.settings.root)
         if record.get("_source_pending"):
-            return dict(state["pending_request"]), state["backup_path"]
+            return {**state["pending_request"], **{key: runtime[key] for key in RUNTIME_KEYS}}, state["backup_path"]
         config = record["config"]
         dataset = self.store.get("datasets", record["dataset_id"])
         manifest = self.settings.path(dataset["manifest_path"])
         if file_hash(manifest) != dataset["sha256"] or dataset["sha256"] != record["dataset_manifest_sha256"]:
             raise ValueError("训练集与已有断点不一致，未启动训练")
-        runtime = recommended_runtime(self.settings.root)
         old_effective = config.get("microbatch", 1) * config.get("grad_accum", 16)
-        if runtime["effective_batch_windows"] != old_effective:
-            runtime = {key: config.get(key, default) for key, default in (("microbatch", 1), ("grad_accum", 16), ("prefetch_batches", 0))}
+        if runtime["source"] != "user" and runtime["effective_batch_windows"] != old_effective:
+            runtime = {**runtime, **validate_runtime(config)}
         if record["training_state"] == "complete" and state.get("auto_replace_source") and plateau_stages(record):
             request = self.sources.request(record, runtime)
+            request.update({key: runtime[key] for key in RUNTIME_KEYS})
             return request, self._snapshot(record, run_path)
         target = int(config["epochs"])
         # A pause before indexing may precede any manifest update; keep that
@@ -151,8 +165,9 @@ class SimpleTrainer:
         request = {"dataset_id": record["dataset_id"], "resume_run_id": record["run_id"], "stage": config["stage"],
                    "epochs": target, "seed": config["seed"], "max_lines": config["max_lines"],
                    "device": "cuda" if config["device"].startswith("cuda") else "cpu",
-                   **{key: runtime[key] for key in ("microbatch", "grad_accum", "prefetch_batches")},
-                   "allow_runtime_batch_change": True, "simple_trainer": True, "progress_epoch_start": start_epoch,
+                   **{key: runtime[key] for key in RUNTIME_KEYS},
+                   "allow_runtime_batch_change": True, "allow_effective_batch_change": runtime["source"] == "user",
+                   "simple_trainer": True, "progress_epoch_start": start_epoch,
                    "progress_floor": self.status()["progress"] if target == state.get("target_epochs") else 0.}
         return request, self._snapshot(record, run_path)
 
@@ -179,23 +194,30 @@ class SimpleTrainer:
                     "original_run_directory": self.settings.relative(run_path.parent), "reason": "simple-trainer-button"})
         return self.settings.relative(backup)
 
-    async def start(self, automatic=False):
+    async def start(self, automatic=False, reconfigure_job_id=None):
         async with self.lock:
             state = self._read(self.state_path, STATE_BYTES)
+            if reconfigure_job_id:
+                if state.get("runtime_apply", {}).get("job_id") != reconfigure_job_id:
+                    return self.status()
+                if self.store.get("jobs", reconfigure_job_id)["status"] not in {"paused", "succeeded"} or reconfigure_job_id in self.jobs.active:
+                    return self.status()
             if automatic:
                 if not state.get("auto_continue") or not state.get("auto_armed") or not state.get("job_id"):
                     return self.status()
                 if self.store.get("jobs", state["job_id"])["status"] != "succeeded":
                     return self.status()
-            if self._busy():
+            if self._busy() or self._worker_exiting(state.get("run_id")):
                 return self.status()  # Repeated clicks cannot queue extra rounds.
             request, backup = await asyncio.to_thread(self._prepare)
-            if self._busy():
+            if self._busy() or self._worker_exiting(state.get("run_id")):
                 return self.status()
             previous = self._read(self.state_path, STATE_BYTES)
             pending = {**previous, "run_id": request.get("resume_run_id") or request["new_run_id"], "target_epochs": request["epochs"],
                        "progress_epoch_start": request["progress_epoch_start"], "backup_path": backup, "updated_at": now()}
             pending.update(auto_armed=bool(previous.get("auto_continue")), auto_error=None)
+            pending.pop("runtime_apply", None)
+            pending["runtime_message"] = "已保存的设置已应用到本次任务"
             if request.get("warm_start_run_id"):
                 history = list(previous.get("source_history", []))
                 if request["warm_start_run_id"] not in {p["run_id"] for p in history}:
@@ -218,7 +240,9 @@ class SimpleTrainer:
     async def pause(self):
         async with self.lock:
             state, record, _ = self._run()
-            atomic_json(self.state_path, {**state, "auto_continue": False, "auto_armed": False, "auto_error": None})
+            state.pop("runtime_apply", None)
+            atomic_json(self.state_path, {**state, "auto_continue": False, "auto_armed": False, "auto_error": None,
+                "runtime_message": "已暂停；保存的强度会在下次点击训练时使用"})
             for job in self._related(record["run_id"]):
                 if job["status"] in {"queued", "running"}:
                     self.jobs.pause_training(job["id"])
@@ -250,6 +274,14 @@ class SimpleTrainer:
             await asyncio.sleep(2)
             try:
                 state = self._read(self.state_path, STATE_BYTES)
+                applying = state.get("runtime_apply")
+                if applying:
+                    job = self.store.get("jobs", applying["job_id"])
+                    if job["status"] in {"paused", "succeeded"} and not self._busy() and job["id"] not in self.jobs.active:
+                        await self.start(reconfigure_job_id=job["id"])
+                    elif job["status"] in {"failed", "cancelled", "interrupted"}:
+                        await self._runtime_failed("强度已保存；当前任务失败或中断，请检查后手动训练")
+                    continue
                 if not (state.get("auto_continue") and state.get("auto_armed") and state.get("job_id")):
                     continue
                 job = self.store.get("jobs", state["job_id"])
@@ -262,7 +294,35 @@ class SimpleTrainer:
                     else:
                         await self.start(automatic=True)
             except (ValueError, KeyError, OSError) as exc:
+                await self._runtime_failed(str(exc))
                 await self._stop_auto(str(exc))
+
+    async def _runtime_failed(self, reason):
+        async with self.lock:
+            state = self._read(self.state_path, STATE_BYTES)
+            if state.pop("runtime_apply", None):
+                atomic_json(self.state_path, {**state, "auto_continue": False, "auto_armed": False,
+                    "auto_error": reason[:1000], "runtime_message": reason[:1000]})
+
+    async def set_runtime(self, payload):
+        if set(payload) - set(RUNTIME_KEYS):
+            raise ValueError("包含未知的训练强度设置")
+        runtime = validate_runtime(payload)
+        async with self.lock:
+            state, record, _ = self._run()
+            active = next((j for j in self._related(record["run_id"]) if j["status"] in {"queued", "running"}), None)
+            save_runtime(self.settings.root, runtime)
+            if active and (not active.get("pause_requested") or state.get("runtime_apply", {}).get("job_id") == active["id"]):
+                state.update(runtime_apply={"job_id": active["id"], "created_at": now()}, auto_armed=False,
+                    runtime_message="正在保存断点，完成后应用新设置并继续")
+                atomic_json(self.state_path, state)
+                self.jobs.pause_training(active["id"])
+            else:
+                state.update(runtime_message="已保存，下次点击训练时生效")
+                atomic_json(self.state_path, state)
+            self.store.event("training.runtime_saved", record["run_id"], runtime=runtime,
+                             apply_after_checkpoint=bool(state.get("runtime_apply")))
+            return self.status()
 
     async def set_source_auto(self, enabled):
         if type(enabled) is not bool:

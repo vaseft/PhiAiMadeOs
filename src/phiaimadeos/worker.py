@@ -129,7 +129,7 @@ def main():
     secret = json.loads(sys.stdin.buffer.read(16384) or b"{}")
     def progress(value, message=None):
         update = value if isinstance(value, dict) else {"progress": value, "message": message or "执行中"}
-        allowed = {k: v for k, v in update.items() if k in {"progress", "message", "phase", "epoch", "step", "metrics", "run_id"}}
+        allowed = {k: v for k, v in update.items() if k in {"progress", "message", "phase", "epoch", "step", "metrics", "run_id", "preparation_runtime", "runtime"}}
         if "progress" in allowed:
             allowed["progress"] = min(1., max(0., float(allowed["progress"])))
         store.update("jobs", job_id, allowed)

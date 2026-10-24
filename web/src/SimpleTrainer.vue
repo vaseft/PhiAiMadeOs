@@ -88,6 +88,7 @@ onUnmounted(() => { stopped = true; clearTimeout(timer) })
     <section class="analysis" aria-label="训练效果分析">
       <div class="analysis-heading"><h1>训练效果</h1><div class="legend"><span class="train-key">训练批次损失</span><span class="val-key">验证损失</span></div></div>
       <label v-if="current.source_history.length" class="history-select">曲线数据阶段 <select v-model="selectedRun" @change="pollCount = 0; curves = []"><option value="">当前阶段 · {{ current.source?.sample_count }} 份谱面</option><option v-for="(source, index) in current.source_history" :key="source.run_id" :value="source.run_id">阶段 {{ index + 1 }} · {{ source.sample_count }} 份 · {{ source.epochs }} 轮</option></select></label>
+      <p v-if="!curves.length" class="analysis-note">正在准备当前数据阶段的训练日志；已有历史曲线可从上方选择。</p>
       <div class="charts"><TrainingLossChart v-for="curve in curves" :key="curve.stage" :curve="curve" /></div>
       <p class="analysis-note">{{ curvesError || (truncated ? '显示最近日志区间。' : '') }} 不同数据阶段独立计轮、独立分析；验证按歌曲簇平均，损失不代表可玩性。</p>
     </section>

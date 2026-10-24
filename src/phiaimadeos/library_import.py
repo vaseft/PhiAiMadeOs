@@ -177,7 +177,7 @@ def import_one(path, archive_sha, source_root, run_id, store, asset_index, expec
                         chart["_pamos_import"] = {"container": "zip", "info_format": "yaml", "info": info, "warnings": list(warnings)}
                     else:
                         raise ValueError("未识别 JSON 谱面方言")
-                    chart_to_ir(chart, "regular", None)
+                    ir = chart_to_ir(chart, "regular", None)
                     if len(canonical_bytes(chart)) > MAX_JSON_BYTES:
                         raise ValueError("转换后的共同 RPE 超过32 MiB，保留原件并等待更大格式支持")
                 except (ValueError, KeyError, TypeError, IndexError, OverflowError) as exc:

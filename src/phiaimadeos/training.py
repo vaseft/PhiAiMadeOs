@@ -296,7 +296,7 @@ def run_training(request: dict, project_root, progress=None) -> dict:
         raise ModelError("INVALID_DEVICE", "当前单模型 worker 仅支持 cpu 或 cuda:0。")
     if requested_device != "cpu" and not torch.cuda.is_available():
         raise ModelError("CUDA_UNAVAILABLE", "请求了 CUDA，但当前运行环境没有可用 CUDA；未自动改成假训练。")
-    device = torch.device(requested_device)
+    device = torch.device("cuda:0" if requested_device == "cuda" else requested_device)
     if device.type == "cuda":
         torch.cuda.set_device(device)
         torch.cuda.reset_peak_memory_stats(device)

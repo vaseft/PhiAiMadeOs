@@ -42,13 +42,21 @@ class Store:
         return json.dumps(value, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
 
     def put(self, kind, record, immutable=False):
-        record = dict(record)
-        record.setdefault("id", new_id())
-        record.setdefault("created_at", now())
-        record["updated_at"] = now()
+        return self.put_many([(kind, record, immutable)])[0]
+
+    def put_many(self, entries):
+        """Register one imported package atomically across its related records."""
+        prepared = []
+        for kind, record, immutable in entries:
+            record = dict(record)
+            record.setdefault("id", new_id())
+            record.setdefault("created_at", now())
+            record["updated_at"] = now()
+            prepared.append((kind, record, immutable))
         with self.connection() as db:
-            db.execute("INSERT INTO records VALUES (?,?,?,?,?,?)", (kind, record["id"], self.encode(record), int(immutable), record["created_at"], record["updated_at"]))
-        return record
+            for kind, record, immutable in prepared:
+                db.execute("INSERT INTO records VALUES (?,?,?,?,?,?)", (kind, record["id"], self.encode(record), int(immutable), record["created_at"], record["updated_at"]))
+        return [record for _, record, _ in prepared]
 
     def get(self, kind, record_id):
         with self.connection() as db:

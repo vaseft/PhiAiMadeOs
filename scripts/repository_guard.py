@@ -14,7 +14,7 @@ REQUIRED = (
 )
 BLOCKED_DIRS = (
     "datasets/", "data/", "media/", "audio/", "raw_charts/", "chart_assets/",
-    "checkpoints/", "runs/", "training_cache/", "model_registry/",
+    "checkpoints/", "runs/", "training_cache/", "model_registry/", "官方谱面/",
     "models/registry/", "node_modules/", ".venv/", "venv/",
     ".pamos/", ".pamos_state/",
     ".tools/", ".runtime/", ".cache/", ".downloads/", ".local/",

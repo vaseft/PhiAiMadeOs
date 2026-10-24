@@ -4,9 +4,12 @@ import { api } from './api'
 import TrainingLossChart from './TrainingLossChart.vue'
 import type { StageCurve } from './TrainingLossChart.vue'
 
-type TrainingState = { state: string; progress: number; message: string; can_start: boolean; can_pause: boolean; auto_continue: boolean }
-const current = ref<TrainingState>({ state: 'connecting', progress: 0, message: '正在连接训练服务…', can_start: false, can_pause: false, auto_continue: false })
+type Source = { run_id: string; sample_count: number; phase: number; patience: number; plateau_stages: string[] }
+type SourceHistory = { run_id: string; sample_count: number; epochs: number }
+type TrainingState = { state: string; progress: number; message: string; can_start: boolean; can_pause: boolean; auto_continue: boolean; auto_replace_source: boolean; source?: Source; source_history: SourceHistory[] }
+const current = ref<TrainingState>({ state: 'connecting', progress: 0, message: '正在连接训练服务…', can_start: false, can_pause: false, auto_continue: false, auto_replace_source: false, source_history: [] })
 const curves = ref<StageCurve[]>([])
+const selectedRun = ref('')
 const curvesError = ref('')
 const truncated = ref(false)
 let pollCount = 0
@@ -23,11 +26,17 @@ async function refresh() {
     refreshing = true
     try {
       const value = await api<TrainingState>('/trainer')
-      if (!stopped && version === generation) { current.value = value; error.value = '' }
+      if (!stopped && version === generation) {
+        if (!selectedRun.value && current.value.source?.run_id !== value.source?.run_id) { curves.value = []; pollCount = 0 }
+        current.value = value; error.value = ''
+      }
       if (pollCount++ % 3 === 0) {
         try {
-          const analysis = await api<{ stages: StageCurve[]; truncated: boolean }>('/trainer/analysis')
-          if (!stopped) { curves.value = analysis.stages; truncated.value = analysis.truncated; curvesError.value = '' }
+          const selection = selectedRun.value
+          const analysis = await api<{ stages: StageCurve[]; truncated: boolean; run_id: string }>('/trainer/analysis' + (selection ? `?run_id=${encodeURIComponent(selection)}` : ''))
+          if (!stopped && selection === selectedRun.value && (selection || analysis.run_id === current.value.source?.run_id)) {
+            curves.value = analysis.stages; truncated.value = analysis.truncated; curvesError.value = ''
+          }
         } catch { curvesError.value = '暂时无法读取曲线，正在重连…' }
       }
     } catch (exc) {
@@ -48,11 +57,11 @@ async function act(action: 'start' | 'pause') {
   catch (exc) { error.value = exc instanceof Error ? exc.message : '操作失败，请稍后重试' }
   finally { pending.value = false }
 }
-async function toggleAuto(event: Event) {
+async function toggleSetting(event: Event, setting: 'auto' | 'source-auto') {
   const enabled = (event.target as HTMLInputElement).checked
   if (pending.value) return
   pending.value = true; generation++; error.value = ''
-  try { current.value = await api<TrainingState>('/trainer/auto', 'POST', { enabled }) }
+  try { current.value = await api<TrainingState>(`/trainer/${setting}`, 'POST', { enabled }) }
   catch (exc) { error.value = exc instanceof Error ? exc.message : '设置失败，请重试' }
   finally { pending.value = false }
 }
@@ -71,11 +80,16 @@ onUnmounted(() => { stopped = true; clearTimeout(timer) })
       <span>{{ percent }}%</span>
     </div>
     <p role="status" aria-live="polite" :class="{ error }">{{ error || (pending ? '正在处理…' : current.message) }}</p>
-    <label class="auto-option"><input type="checkbox" :checked="current.auto_continue" :disabled="pending || current.state === 'connecting' || current.state === 'unavailable'" @change="toggleAuto"><span>自动继续</span><small>每轮结束接着训练，暂停时关闭</small></label>
+    <div class="training-options">
+      <label class="auto-option"><input type="checkbox" :checked="current.auto_continue" :disabled="pending || current.state === 'connecting' || current.state === 'unavailable'" @change="toggleSetting($event, 'auto')"><span>自动继续</span><small>暂停时关闭</small></label>
+      <label class="auto-option"><input type="checkbox" :checked="current.auto_replace_source" :disabled="pending || current.state === 'connecting' || current.state === 'unavailable'" @change="toggleSetting($event, 'source-auto')"><span>无改善自动换源</span><small>连续8轮未刷新验证最佳值后切换</small></label>
+    </div>
+    <p v-if="current.source" class="source-status">数据阶段 {{ current.source.phase }} · {{ current.source.sample_count }} 份谱面<span v-if="current.source.plateau_stages.length"> · 已达到换源条件</span></p>
     <section class="analysis" aria-label="训练效果分析">
       <div class="analysis-heading"><h1>训练效果</h1><div class="legend"><span class="train-key">训练批次损失</span><span class="val-key">验证损失</span></div></div>
+      <label v-if="current.source_history.length" class="history-select">曲线数据阶段 <select v-model="selectedRun" @change="pollCount = 0; curves = []"><option value="">当前阶段 · {{ current.source?.sample_count }} 份谱面</option><option v-for="(source, index) in current.source_history" :key="source.run_id" :value="source.run_id">阶段 {{ index + 1 }} · {{ source.sample_count }} 份 · {{ source.epochs }} 轮</option></select></label>
       <div class="charts"><TrainingLossChart v-for="curve in curves" :key="curve.stage" :curve="curve" /></div>
-      <p class="analysis-note">{{ curvesError || (truncated ? '显示最近日志区间。' : '') }} 验证按独立歌曲簇平均；损失变化不代表最终谱面可玩性。</p>
+      <p class="analysis-note">{{ curvesError || (truncated ? '显示最近日志区间。' : '') }} 不同数据阶段独立计轮、独立分析；验证按歌曲簇平均，损失不代表可玩性。</p>
     </section>
   </main>
 </template>
@@ -98,9 +112,13 @@ button:focus-visible { outline: 3px solid #8cafff; outline-offset: 3px; }
 .progress span { position: absolute; inset: 0; display: grid; place-items: center; font-size: 13px; font-variant-numeric: tabular-nums; font-weight: 600; color: #19325b; }
 p { margin: 14px 0 0; min-height: 20px; font-size: 12px; line-height: 1.6; text-align: center; color: #6a788d; overflow-wrap: anywhere; }
 p.error { color: #b43e3e; }
-.auto-option { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; margin: 20px 0 24px; font-size: 13px; cursor: pointer; }
+.training-options { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px 24px; margin: 20px 0 8px; }
+.auto-option { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; font-size: 13px; cursor: pointer; }
 .auto-option input { accent-color: #326be5; width: 17px; height: 17px; cursor: pointer; }
 .auto-option small { color: #8190a6; font-size: 11px; }
+p.source-status { margin: 6px 0 18px; font-size: 11px; color: #71829c; }
+.history-select { display: flex; align-items: center; gap: 10px; font-size: 12px; color: #71829c; margin: 0 0 14px; }
+.history-select select { padding: 5px 8px; border: 1px solid #d7dfea; border-radius: 7px; background: #fff; color: #344259; font: inherit; }
 .analysis { border-top: 1px solid #edf0f6; padding-top: 20px; }
 .analysis-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 h1 { margin: 0; font-size: 15px; font-weight: 600; }

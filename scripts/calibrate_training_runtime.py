@@ -149,7 +149,10 @@ def main():
                 candidates.append((sum(row["seconds"] for row in profiles), batch_size, prefetch))
         if not candidates:
             raise ValueError("没有覆盖全部阶段且在预算内完成的档位")
-        _, batch_size, prefetch = min(candidates)
+        fastest = min(item[0] for item in candidates)
+        # Short timing runs are noisy: prefer the smaller parallel batch when
+        # it is within five percent of the best observed three-stage duration.
+        _, batch_size, prefetch = min((item for item in candidates if item[0] <= fastest * 1.05), key=lambda item: item[1])
         if file_hash(source_path) != parent_sha:
             raise ValueError("原训练记录在校准期间变化，未登记推荐档位")
         for metadata in parent["stages"].values():
@@ -159,7 +162,10 @@ def main():
         recommendation = {"microbatch": batch_size, "grad_accum": 16 // batch_size, "prefetch_batches": prefetch,
                           "effective_batch_windows": 16, "calibration_id": identifier, "created_at": now()}
         atomic_json(settings.root / ".local/training-runtime.json", recommendation)
-        report.update(status="succeeded", finished_at=now(), recommendation=recommendation)
+        from phiaimadeos.training_runtime import export_runtime_asset
+        export_runtime_asset(settings.root)
+        report.update(status="succeeded", finished_at=now(), recommendation=recommendation,
+            selection_policy="smallest-batch-within-5pct-fastest-three-stage-total-v1")
         atomic_json(folder / "report.json", report)
         store.update("jobs", identifier, {"status": "succeeded", "progress": 1, "finished_at": now(),
             "message": "训练负载档位已按实测吞吐选定；已有模型和断点未改", "result": {"report_path": settings.relative(folder / "report.json"), **recommendation}})

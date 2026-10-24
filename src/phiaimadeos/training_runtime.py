@@ -19,3 +19,11 @@ def recommended_runtime(root):
                 "source": "local_calibration", "calibration_id": value.get("calibration_id")}
     except (OSError, ValueError, TypeError):
         return baseline
+
+
+def export_runtime_asset(root):
+    """Let an already running older backend serve the safe display defaults."""
+    from .settings import atomic_json
+    assets = Path(root) / "web/dist/assets"
+    if assets.is_dir():
+        atomic_json(assets / "training-runtime.json", recommended_runtime(root), compact=True)

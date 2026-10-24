@@ -4,7 +4,7 @@
 
 ## 入口与隔离
 
-- `training.run_training(request, project_root, progress)`：请求字段为 ADR 0001 的 `manifest_path,stage,epochs,seed,grad_accum,device,resume_run_id?`，另接受 worker 的 `job_id` 与可选 `max_lines`（64/128/512，默认64）。返回包含 `run_id,training_state,models,bundle` 的 JSON 对象。
+- `training.run_training(request, project_root, progress)`：请求字段为 ADR 0001 的 `manifest_path,stage,epochs,seed,grad_accum,device,resume_run_id?`，另接受 worker 的 `job_id`、`max_lines`（64/128/512，默认64）及运行字段`microbatch,prefetch_batches,allow_runtime_batch_change`。返回包含 `run_id,training_state,models,bundle` 的 JSON 对象。
 - `inference.generate_learned(analysis, conditions, bundle, project_root, progress=None)`：返回 RPE chart，`pamos` 保存权重哈希、训练 run、特征哈希、条件哈希、种子和约束修复记录。
 - `progress` 接收单个 JSON dict，含 `phase,progress,message`；训练登记后尽早报告 `run_id`。
 - 导入这些模块不导入 torch。只有独占 worker 调用训练、推理或模型工厂时才导入 torch。GPU互斥和取消进程由 root worker 负责，三个阶段不会同时驻留 GPU；纯配置始终旁路线运动阶段。
@@ -55,7 +55,7 @@ placement/...
 
 JSON、权重、完整状态采用临时文件、flush/fsync与原子重命名。checkpoint使用CPU tensor和普通dict/list/tuple/标量，不保存自定义类或可执行对象；读取一律 `torch.load(weights_only=True)`，不使用`weights_only=False`。权重与恢复文件都先校验安全路径和SHA。恢复状态包含optimizer/scheduler/scaler、Python/NumPy/torch/CUDA随机状态、epoch、打乱后的窗口序列与下一窗位置；只在完整优化器步保存，不在半个累积批次恢复。
 
-初始状态、每50个优化器步与每轮末保存恢复点；完整状态文件以不可变名称写入，再原子更新manifest引用，最后仅清理本阶段的上一恢复点。best权重保留，避免破坏旧registry的引用。恢复可以增加epochs；其他配置、输入和拆分须保持一致，配置/环境变化历史单独记录。
+初始状态、每50个优化器步与每轮末保存恢复点；完整状态文件以不可变名称写入，再原子更新manifest引用，最后仅清理本阶段的上一恢复点。best权重保留，避免破坏旧registry的引用。恢复可以增加epochs，或显式调整保持有效批量的运行批次/预取；其余优化器、模型配置、输入和拆分须一致，配置/环境变化历史单独记录。
 
 失败写 `training_state=failed`；worker强制取消时可能保留 `running`，应结合其`job_id`在工作台显示cancelled/interrupted。最末原子断点可供恢复。请求在授权或标签预检阶段拒绝时没有创建run，错误由job保存。单阶段训练不会虚构完整bundle能力；只有各必需阶段都有train/val模式覆盖才列入bundle支持模式。
 

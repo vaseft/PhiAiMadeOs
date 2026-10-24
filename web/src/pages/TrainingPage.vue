@@ -13,7 +13,14 @@ function applyRuntime() {
   const batch = [16, 8, 4, 2, 1].find(value => value <= runtime.value.microbatch && effective % value === 0) || 1
   Object.assign(training, { microbatch: batch, grad_accum: effective / batch, prefetch_batches: runtime.value.prefetch_batches, allow_runtime_batch_change: !!previous })
 }
-onMounted(async () => { try { runtime.value = await api('/training/runtime'); if (!training.resume_run_id) applyRuntime() } catch { /* Older servers keep the explicit baseline until restarted. */ } })
+onMounted(async () => {
+  try { runtime.value = await api('/training/runtime') }
+  catch {
+    try { const response = await fetch('/assets/training-runtime.json', { cache: 'no-store' }); if (response.ok) runtime.value = await response.json() }
+    catch { /* Keep baseline when neither calibrated source is available. */ }
+  }
+  if (!training.resume_run_id) applyRuntime()
+})
 function audioFor(chart: RecordData) { return state.assets.find(asset => asset.id === chart.music_asset_id) }
 const eligibility = computed(() => state.charts.map(chart => ({ chart, reasons: trainingBlockers(chart, audioFor(chart)) })))
 const eligible = computed(() => eligibility.value.filter(item => !item.reasons.length).map(item => item.chart))
@@ -27,7 +34,7 @@ const chosenRun = ref(''), evidence = ref(''), promotion = ref('candidate')
 const promoteModel = ref('')
 const run = computed(() => state.runs.find(r => r.id === chosenRun.value || r.run_id === chosenRun.value))
 watch(() => training.resume_run_id, id => {
-  if (!id) return
+  if (!id) { training.allow_runtime_batch_change = false; applyRuntime(); return }
   const r = state.runs.find(r => (r.run_id || r.id) === id)
   if (!r?.config) return
   const d = state.datasets.find(d => d.id === r.dataset_id || d.manifest?.id === r.dataset_id || d.sha256 === r.dataset_manifest_sha256)

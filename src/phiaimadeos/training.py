@@ -30,6 +30,19 @@ def _now():
     return datetime.now(timezone.utc).isoformat()
 
 
+def _replace_atomic(source: Path, destination: Path):
+    # Windows readers can briefly deny delete sharing while the workbench reads
+    # a manifest. Retry the same atomic replacement, never truncate the target.
+    for attempt in range(9):
+        try:
+            os.replace(source, destination)
+            return
+        except PermissionError as exc:
+            if os.name != "nt" or getattr(exc, "winerror", None) not in (5, 32, 33) or attempt == 8:
+                raise
+            time.sleep(min(0.02 * 2 ** attempt, 0.25))
+
+
 def _atomic_json(path: Path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + "." + uuid.uuid4().hex + ".tmp")
@@ -38,7 +51,7 @@ def _atomic_json(path: Path, value):
             json.dump(value, handle, ensure_ascii=False, indent=2, allow_nan=False)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary, path)
+        _replace_atomic(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
 
@@ -155,7 +168,7 @@ def _save_torch(path, payload, torch):
             torch.save(_cpu_state(payload, torch), handle)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary, path)
+        _replace_atomic(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
     return file_hash(path)
@@ -364,7 +377,8 @@ def run_training(request: dict, project_root, progress=None) -> dict:
     try:
         for stage_index, name in enumerate(stages):
             previous = record["stages"].get(name, {})
-            if previous.get("training_state") == "complete" and not extend_completed:
+            if previous.get("training_state") == "complete" and (
+                    previous.get("epochs_completed", 0) >= epochs or (previous.get("early_stopped") and not extend_completed)):
                 weight = safe_path(root, previous["checkpoint_path"])
                 if file_hash(weight) != previous["checkpoint_sha256"]:
                     raise ModelError("CHECKPOINT_HASH_MISMATCH", "已完成阶段的权重已发生变化。")
@@ -415,10 +429,11 @@ def run_training(request: dict, project_root, progress=None) -> dict:
                 scaler.load_state_dict(state["scaler"])
                 start_epoch, cursor, optimizer_step, order = state["epoch"], state["cursor"], state["optimizer_step"], state["order"]
                 best_val, stale = state["best_val"], state["stale"]
-                if extend_completed:
-                    for group, base_lr in zip(optimizer.param_groups, scheduler.base_lrs):
-                        group["lr"] = base_lr * schedule(optimizer_step)
-                    scheduler._last_lr = [group["lr"] for group in optimizer.param_groups]
+                # A previous attempt may already have extended the run config
+                # while later stages still carry checkpoints from the old target.
+                for group, base_lr in zip(optimizer.param_groups, scheduler.base_lrs):
+                    group["lr"] = base_lr * schedule(optimizer_step)
+                scheduler._last_lr = [group["lr"] for group in optimizer.param_groups]
                 _restore_rng(state["rng"], torch, np)
                 stage_info = {**previous, "training_state": "running"}
                 del state

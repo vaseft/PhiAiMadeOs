@@ -27,6 +27,14 @@ export async function api<T = any>(path: string, method = 'GET', body?: unknown)
   let res: Response
   try { res = await fetch(prefix + path, options) }
   catch { throw new ApiError('无法连接本地服务。请检查工作台服务，并使用“重新连接”。', 'NETWORK_ERROR', 0) }
+  if (res.status === 401) {
+    // The local server rotates its session after restart. Re-authenticate once;
+    // the rejected request never reached an authorized mutation handler.
+    await openSession(true)
+    headers['X-PAMOS-Token'] = token
+    try { res = await fetch(prefix + path, options) }
+    catch { throw new ApiError('服务重启后重新连接失败，请点击“重新连接”。', 'NETWORK_ERROR', 0) }
+  }
   let data: any
   try { data = await res.json() } catch { data = null }
   if (!res.ok) {

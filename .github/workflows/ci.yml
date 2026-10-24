@@ -1,28 +1,49 @@
-name: PAMOs bootstrap checks
+name: PAMOs repository and contract checks
+
 on:
   push:
     branches: [main, develop]
   pull_request:
+    branches: [develop, main]
+
 permissions:
   contents: read
+
 jobs:
-  repository-checks:
+  repository-safety:
+    name: repository-safety
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Verify tracked paths, privacy guards and documents
+        run: python3 scripts/repository_guard.py
+      - name: Check whitespace errors
+        run: git diff --check HEAD^
+
+  contract-tests:
+    name: contract-tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verify bootstrap documents
+      - name: Python environment
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install contract dependencies only when Kit exists
+        shell: bash
         run: |
-          test -f README.md
-          test -f AGENTS.md
-          test -f CODEX_START.md
-          test -f LICENSE
-          test -f .gitignore
-      - name: Run contract checks when full Agent Kit exists
-        run: |
-          if [ -f scripts/validate_v3_contracts.py ]; then
+          if [ -f scripts/validate_v3_contracts.py ] || [ -f scripts/validate_v4_contracts.py ] || [ -f scripts/validate_v5_contracts.py ]; then
             python -m pip install 'jsonschema>=4.22,<5' 'PyYAML>=6,<7'
-            python scripts/validate_v3_contracts.py
+          else
+            echo "::notice::V5.1 Agent Kit is not yet imported; checking bootstrap only."
           fi
+      - name: Execute available contract and unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f scripts/validate_v3_contracts.py ]; then python scripts/validate_v3_contracts.py; fi
           if [ -f scripts/validate_v4_contracts.py ]; then python scripts/validate_v4_contracts.py; fi
           if [ -f scripts/validate_v5_contracts.py ]; then python scripts/validate_v5_contracts.py; fi
           if [ -d tests ]; then python -m unittest discover -s tests -v; fi
+          echo "::notice::CI does not run GPU training, Phira-Pro gameplay, or RPE Next live bridge tests."

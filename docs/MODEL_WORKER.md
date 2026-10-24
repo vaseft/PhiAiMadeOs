@@ -23,7 +23,7 @@
 
 ## 数据拒绝与拆窗
 
-manifest 所有使用样本须为 `license_status=explicit_permitted` 且 `allowed_actions` 字符串数组包含 `training`。模型只读取 manifest 中的相对路径；拒绝越界路径、官方来源标签、噪域、同歌跨 split、缓存/谱面哈希不符和特征版本混用。`chart_file_sha256` 校验文件字节，`chart_sha256` 可校验规范化谱面；训练记录二者。测试集文件不打开，测试集指标不用于调参。
+manifest 所有使用样本须为 `license_status=explicit_permitted` 且 `allowed_actions` 字符串数组包含 `training`。来源标签只记录出处，不自动授予许可；用户提供的官谱库默认仍为 unknown 且无 training 权限。模型只读取 manifest 中的相对路径；拒绝越界路径、未授权数据、噪域、同歌跨 split、缓存/谱面哈希不符和特征版本混用。`chart_file_sha256` 校验文件字节，`chart_sha256` 可校验规范化谱面；训练记录二者。测试集文件不打开，测试集指标不用于调参。
 
 必须有独立的 train 与 val 歌曲簇。使用单歌曲解析缓存和 NPY mmap，按歌曲打乱并在曲内打乱窗口。窗口上限为384帧、192音符槽、64线事件；超过容量或每时间单元超过6事件时递归拆窗并报告 `additional_splits`。Hold以起点归属窗口，持续时间不因窗边界丢失。无法进一步表达的同时事件明确失败，不删标签。
 

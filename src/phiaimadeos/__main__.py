@@ -51,7 +51,7 @@ def main():
     with singleton(settings.root):
         import uvicorn
         print("PhiAiMadeOs 本地工作台：http://127.0.0.1:8765\n本轮功能未运行测试；真实训练与客户端试玩需用户提供授权素材。", flush=True)
-        uvicorn.run("phiaimadeos.api.app:create_app", factory=True, host="127.0.0.1", port=8765, workers=1, ws_max_size=40 * 1024 * 1024, timeout_keep_alive=5)
+        uvicorn.run("phiaimadeos.api.app:create_app", factory=True, host="127.0.0.1", port=8765, workers=1, access_log=False, ws_max_size=40 * 1024 * 1024, timeout_keep_alive=5)
 
 
 if __name__ == "__main__":

@@ -41,7 +41,21 @@ def _metadata(archive, members):
     for name in ("info.yml", "info.yaml"):
         if name in members:
             value = _info_yaml(_bounded_read(archive, members[name], 65536))
-            return value, {str(k).lower(): v for k, v in value.items()}
+            # RPE switches such as useRpen/useRpe170Speed are case-sensitive.
+            normalized = dict(value)
+            folded = {}
+            for key, item in value.items():
+                alias = key.casefold()
+                if alias in folded and folded[alias] != item:
+                    raise ValueError("info.yml 含大小写冲突字段，不能猜测配置")
+                folded[alias] = item
+            for key in ("name", "level", "chart", "music", "illustration", "song", "picture", "offset"):
+                if key in folded:
+                    normalized.setdefault(key, folded[key])
+            for old, new in (("song", "music"), ("picture", "illustration")):
+                if old in normalized:
+                    normalized.setdefault(new, normalized[old])
+            return value, normalized
     if "info.txt" not in members:
         return {}, {}
     text = _bounded_read(archive, members["info.txt"], 65536).decode("utf-8-sig")

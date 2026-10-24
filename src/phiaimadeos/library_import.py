@@ -1,7 +1,9 @@
 """Explicit local library import. No rights promotion, training, or external calls."""
 from __future__ import annotations
 from collections import Counter
+import csv
 import hashlib
+import io
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -57,7 +59,28 @@ def _metadata(archive, members):
                     normalized.setdefault(new, normalized[old])
             return value, normalized
     if "info.txt" not in members:
-        return {}, {}
+        if "info.csv" not in members:
+            return {}, {}
+        text = _bounded_read(archive, members["info.csv"], 65536).decode("utf-8-sig")
+        try:
+            reader = csv.DictReader(io.StringIO(text, newline=""), strict=True)
+            fields = reader.fieldnames or []
+            if not fields or any(not field.strip() for field in fields) or len({field.casefold() for field in fields}) != len(fields):
+                raise ValueError("info.csv 列名缺失或重复")
+            rows = [row for row in reader if any(value for value in row.values())]
+        except csv.Error as exc:
+            raise ValueError("info.csv 格式无效") from exc
+        if len(rows) != 1 or None in rows[0] or any(value is None for value in rows[0].values()):
+            raise ValueError("info.csv 必须明确包含一条完整谱面记录，不能猜测多条配置")
+        value = rows[0]
+        folded = {key.casefold(): item for key, item in value.items()}
+        normalized = dict(value)
+        for old, new in (("chart", "chart"), ("music", "music"), ("image", "illustration"),
+                         ("name", "name"), ("level", "level"), ("illustrator", "illustrator"), ("designer", "charter")):
+            if old in folded:
+                normalized[new] = folded[old]
+        normalized["_pamos_metadata_format"] = "csv"
+        return value, normalized
     text = _bounded_read(archive, members["info.txt"], 65536).decode("utf-8-sig")
     info = {}
     for line in text.splitlines():
@@ -183,10 +206,14 @@ def import_one(path, archive_sha, source_root, run_id, store, asset_index, expec
                         raise ValueError("原始 JSON 超过32 MiB解析限额，原件已存档")
                     if "formatVersion" in native:
                         source_format = "phigros_v" + str(native["formatVersion"])
+                        if "line.csv" in members or info.get("_pamos_metadata_format") == "csv":
+                            raise ValueError("外置 CSV 全局/判定线图片配置尚未映射；保留原件及资源，不生成省略演出的预览")
                         from .official import convert_official
                         chart = convert_official(native, info=info)
                     elif all(k in native for k in ("META", "BPMList", "judgeLineList")):
                         source_format = "rpe"
+                        if "line.csv" in members or info.get("_pamos_metadata_format") == "csv":
+                            raise ValueError("外置 CSV 全局/判定线图片配置尚未映射；保留原件及资源，不生成省略演出的预览")
                         chart = native
                         chart["_pamos_import"] = {"container": "zip", "info_format": "yaml", "info": info, "warnings": list(warnings)}
                     else:
@@ -261,7 +288,7 @@ def import_one(path, archive_sha, source_root, run_id, store, asset_index, expec
                 warnings.append(conversion_error or "未能转换，原件只读保留")
             warnings.extend(["用户提供的官谱来源声明，未独立认证来源或许可", "未自动授权训练/分发；未自动确认对齐或试玩", "源小数难度及特殊难度保留，训练条件不自动舍入或映射"])
             extracted_names = {chart_member.filename, music_member.filename if music_member else None, image_member.filename if image_member else None}
-            metadata_names = {"info.txt", "info.yml", "info.yaml"}
+            metadata_names = {"info.txt", "info.yml", "info.yaml", "info.csv"}
             retained_only = [item.filename for item in members.values() if not item.is_dir() and item.filename not in extracted_names and item.filename.lower() not in metadata_names]
             if retained_only:
                 warnings.append("附加包内文件仍保留在未修改的原包，未打开或执行：" + ", ".join(retained_only[:12]))

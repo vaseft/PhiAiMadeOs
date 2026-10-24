@@ -17,6 +17,7 @@ BLOCKED_DIRS = (
     "checkpoints/", "runs/", "training_cache/", "model_registry/",
     "models/registry/", "node_modules/", ".venv/", "venv/",
     ".pamos/", ".pamos_state/",
+    ".tools/", ".runtime/", ".cache/", ".downloads/", ".local/",
 )
 BLOCKED_EXTENSIONS = {
     ".mp3", ".flac", ".ogg", ".wav", ".pez", ".pt", ".pth", ".ckpt",

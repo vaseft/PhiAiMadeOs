@@ -1,0 +1,52 @@
+# Local datasets, music, charts and generated media
+/datasets/
+/data/
+/media/
+/audio/
+/raw_charts/
+/chart_assets/
+/checkpoints/
+/runs/
+/training_cache/
+/model_registry/
+/models/registry/
+*.mp3
+*.flac
+*.ogg
+*.wav
+*.pez
+*.zip
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+# Credentials / local configuration
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+.pamos/
+.pamos_state/
+.mcp.local.json
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+# Frontend
+node_modules/
+dist/
+# Database and logs
+*.sqlite
+*.sqlite3
+*.db
+logs/
+*.log
+# IDE
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

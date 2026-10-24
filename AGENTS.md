@@ -1,6 +1,6 @@
 # PhiAiMadeOs（PAMOs）— Codex 总工程 Agent
 
-> **当前仓库状态：初始化骨架；完整 V5.1 Agent Kit 尚未导入。** 这里描述开发约束和预期验收标准，不表示功能已经实现。每次启动必须先核对仓库树、分支、远端与测试结果；不得凭文档虚构代码或模型。
+> **当前分支已导入用户现有 V5.1 Agent Kit 的开发规范、配置、Schema、提示词、测试及离线 MCP 最小原型。** 导入不表示完整产品、训练模型、审核 UI 或实时编辑器桥接已经实现，也不表示已经推送或合并。每次启动必须先核对仓库树、分支、远端与测试结果；不得凭文档虚构代码或模型。
 
 ## 0. 项目与仓库标识
 - 产品名：PhiAiMadeOs，简称 PAMOs；GitHub：`vaseft/PhiAiMadeOs`。
@@ -71,10 +71,16 @@
 - 外部 API 调用保存 `provider/model/prompt_template_version/schema_version`（不保存 API token）；后处理提示词更改需同步修改测试与版本记录。
 
 ## 4. 本轮执行原则与质量门槛
-1. 开工先读：`AGENTS.md`、`CODEX_START.md`、`docs/32_VERSION_CONTROL_POLICY.md`；确认 V5.1 Kit 是否已导入后读取其 `CODEX_V51_START_HERE.md`、MCP/训练/审计文档。
+1. 开工先读：`AGENTS.md`、`CODEX_START.md`、`docs/32_VERSION_CONTROL_POLICY.md`；再读 `docs/AGENT_V51_DEVELOPMENT.md`、`CODEX_V51_START_HERE.md` 和与任务相关的 MCP/训练/审计文档。
 2. 建立 feature 分支前确保基于正确的 `develop`，不得覆盖本地未提交变更；先查看 status/log/remote。
-3. 当前阶段优先：导入并整理 V5.1 文件、依赖/许可证审核 → 离线 RPE 格式和 MCP 测试 → live editor bridge → 训练与审核 UI。功能实现与文档“计划”严格区分。
+3. 当前阶段优先：核对 V5.1 导入、依赖/许可证和离线测试 → 按独立功能 PR 推进 live editor bridge、训练与审核 UI。功能实现与文档“计划”严格区分；后续实现不能由一次包导入或静态检查宣称完成。
 4. 最后汇报必须包含：分支、提交 SHA、PR 地址、被修改文件、已运行的具体测试及其结果、未完成部分、与目标硬件的实测情况。
 5. 一切写操作要求可撤销、可审计、可追踪；不要让 AI 在未审阅的情况下批量覆盖谱面、改写训练标签或推送生产主分支。
 
-**如果本地完整 Agent Kit 尚未导入，本文件是最小可执行工程规范；不意味着 MCP server、AI 模型与 UI 已在 GitHub 仓库中存在。**
+## 5. V5.1 技术规范入口与优先级
+
+完整技术 Agent 已整合至 [docs/AGENT_V51_DEVELOPMENT.md](docs/AGENT_V51_DEVELOPMENT.md)，原包启动技术清单保存在 [docs/legacy/CODEX_V3_START_HERE.md](docs/legacy/CODEX_V3_START_HERE.md)。当前执行入口为 [CODEX_START.md](CODEX_START.md) 与 [CODEX_V51_START_HERE.md](CODEX_V51_START_HERE.md)。
+
+本文件全部产品、安全、版本控制及回滚规则继续生效；[docs/32_VERSION_CONTROL_POLICY.md](docs/32_VERSION_CONTROL_POLICY.md) 保持同等约束力。历史 V3/V4/V5 文档中的“最高优先级”、初始化仓库、远端缺失或可选 develop 描述均不得覆盖本文件和版本控制规范；技术冲突按 V5.1 → V5 → V4 → V3 的演进解释，无法兼容时报告并通过测试/ADR 处理。
+
+**离线候选编辑原型、MCP SDK 通信、实时编辑器桥接、模型训练、非 AI 音频审计、人工审核 UI 和 Phira-Pro 试玩是不同验收项，必须分别给出真实结果。**

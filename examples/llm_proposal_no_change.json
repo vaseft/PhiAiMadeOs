@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0.0",
+  "request_id": "demo",
+  "chart_hash": "hash-demo",
+  "segment_hash": "hash-seg-demo",
+  "status": "no_change",
+  "summary": "缺少足够确定的局部节奏证据，保持现有配置并提示人工复核。",
+  "patches": [],
+  "review_flags": [
+    {
+      "start_beat": 32,
+      "end_beat": 36,
+      "reason": "起音置信度较低，建议人工试听。"
+    }
+  ]
+}

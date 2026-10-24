@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.phiaimadeos.invalid/schemas/condition_label.schema.json",
+  "title": "PhiAiMadeOs chart condition training label v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "label_schema_version",
+    "song_group_id",
+    "chart_id",
+    "chart_mode",
+    "key_count",
+    "difficulty_class",
+    "difficulty_value",
+    "conditions",
+    "field_provenance"
+  ],
+  "properties": {
+    "label_schema_version": {
+      "const": "3.0.0"
+    },
+    "song_group_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "chart_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "chart_mode": {
+      "enum": [
+        "regular",
+        "pure_keys",
+        "anomaly",
+        "unknown"
+      ]
+    },
+    "key_count": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "enum": [
+            4,
+            5,
+            6
+          ]
+        }
+      ]
+    },
+    "difficulty_class": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "enum": [
+            "EZ",
+            "HD",
+            "IN",
+            "AT"
+          ]
+        }
+      ]
+    },
+    "difficulty_value": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 18
+        }
+      ]
+    },
+    "conditions": {
+      "type": "object",
+      "required": [
+        "wildness",
+        "performance_intensity",
+        "performance_style",
+        "special_features"
+      ],
+      "properties": {
+        "wildness": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "performance_intensity": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "performance_style": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "special_features": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "field_provenance": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "source",
+          "confidence"
+        ],
+        "properties": {
+          "source": {
+            "enum": [
+              "metadata",
+              "parser",
+              "computed_proxy",
+              "human",
+              "unknown",
+              "synthetic"
+            ]
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "annotator": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "method_version": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "rights_status": {
+      "enum": [
+        "confirmed",
+        "unconfirmed",
+        "rejected"
+      ]
+    },
+    "source_format": {
+      "type": "string"
+    },
+    "reviewed_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

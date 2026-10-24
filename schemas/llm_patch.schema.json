@@ -1,0 +1,386 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PAMOs LLM Patch v4",
+  "type": "object",
+  "required": [
+    "op_id",
+    "op",
+    "target_id",
+    "payload",
+    "reason",
+    "evidence_refs",
+    "confidence"
+  ],
+  "properties": {
+    "op_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,64}$"
+    },
+    "op": {
+      "enum": [
+        "MOVE_NOTE_TIME",
+        "CHANGE_NOTE_KIND",
+        "MOVE_NOTE_X",
+        "MOVE_NOTE_LANE",
+        "CHANGE_HOLD_END",
+        "ADD_NOTE",
+        "REMOVE_NOTE",
+        "TUNE_LINE_EVENT",
+        "SUGGEST_ONLY"
+      ]
+    },
+    "target_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "payload": {
+      "type": "object",
+      "maxProperties": 10
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 500
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 128
+      },
+      "uniqueItems": true,
+      "maxItems": 8
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "MOVE_NOTE_TIME"
+          }
+        },
+        "required": [
+          "op"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "new_start_beat": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "new_start_beat"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "CHANGE_NOTE_KIND"
+          }
+        },
+        "required": [
+          "op"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "new_kind": {
+                "enum": [
+                  "TAP",
+                  "DRAG",
+                  "FLICK",
+                  "HOLD"
+                ]
+              }
+            },
+            "required": [
+              "new_kind"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "MOVE_NOTE_X"
+          }
+        },
+        "required": [
+          "op"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "new_x": {
+                "type": "number",
+                "minimum": -2000,
+                "maximum": 2000
+              }
+            },
+            "required": [
+              "new_x"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "MOVE_NOTE_LANE"
+          }
+        },
+        "required": [
+          "op"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "new_lane_index": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 5
+              }
+            },
+            "required": [
+              "new_lane_index"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "CHANGE_HOLD_END"
+          }
+        },
+        "required": [
+          "op"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "new_end_beat": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "new_end_beat"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "ADD_NOTE"
+          }
+        },
+        "required": [
+          "op"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "enum": [
+                  "TAP",
+                  "DRAG",
+                  "FLICK",
+                  "HOLD"
+                ]
+              },
+              "start_beat": {
+                "type": "number",
+                "minimum": 0
+              },
+              "end_beat": {
+                "type": "number",
+                "minimum": 0
+              },
+              "line_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "x": {
+                "type": "number",
+                "minimum": -2000,
+                "maximum": 2000
+              },
+              "above": {
+                "enum": [
+                  1,
+                  2
+                ]
+              },
+              "is_fake": {
+                "const": false
+              },
+              "lane_index": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 5
+              }
+            },
+            "required": [
+              "kind",
+              "start_beat",
+              "line_id",
+              "x",
+              "above",
+              "is_fake"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "REMOVE_NOTE"
+          }
+        },
+        "required": [
+          "op"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "TUNE_LINE_EVENT"
+          }
+        },
+        "required": [
+          "op"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "event_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "field": {
+                "enum": [
+                  "easing",
+                  "start_x",
+                  "end_x",
+                  "start_y",
+                  "end_y",
+                  "start_rotation",
+                  "end_rotation",
+                  "start_alpha",
+                  "end_alpha"
+                ]
+              },
+              "new_value": {
+                "type": "number",
+                "minimum": -2000,
+                "maximum": 2000
+              }
+            },
+            "required": [
+              "event_id",
+              "field",
+              "new_value"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "SUGGEST_ONLY"
+          }
+        },
+        "required": [
+          "op"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "topic": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              }
+            },
+            "required": [
+              "topic"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}

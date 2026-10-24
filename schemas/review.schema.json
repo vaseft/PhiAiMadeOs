@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.phiaimadeos.invalid/schemas/review.schema.json",
+  "title": "PhiAiMadeOs Human Review Record",
+  "type": "object",
+  "required": ["review_id", "candidate_id", "candidate_version", "reviewer", "created_at", "scores", "total", "decision", "playtested", "annotations"],
+  "properties": {
+    "review_id": {"type": "string", "minLength": 1},
+    "candidate_id": {"type": "string", "minLength": 1},
+    "candidate_version": {"type": "integer", "minimum": 1},
+    "reviewer": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "scores": {
+      "type": "object",
+      "required": ["rhythm", "playability", "readability", "line_motion", "difficulty_fit", "completeness"],
+      "properties": {
+        "rhythm": {"$ref": "#/$defs/score"},
+        "playability": {"$ref": "#/$defs/score"},
+        "readability": {"$ref": "#/$defs/score"},
+        "line_motion": {"$ref": "#/$defs/score"},
+        "difficulty_fit": {"$ref": "#/$defs/score"},
+        "completeness": {"$ref": "#/$defs/score"}
+      },
+      "additionalProperties": false
+    },
+    "total": {"type": "number", "minimum": 0, "maximum": 100},
+    "decision": {"enum": ["APPROVED", "REVISION_REQUESTED", "REJECTED"]},
+    "playtested": {"type": "boolean"},
+    "warn_override_reason": {"type": ["string", "null"]},
+    "comment": {"type": "string"},
+    "annotations": {
+      "type": "array",
+      "items": {
+        "type": "object", "required": ["start_ms", "type", "severity", "comment"],
+        "properties": {
+          "start_ms": {"type": "number", "minimum": 0},
+          "end_ms": {"type": ["number", "null"], "minimum": 0},
+          "note_ids": {"type": "array", "items": {"type": "string"}},
+          "line_ids": {"type": "array", "items": {"type": "string"}},
+          "type": {"enum": ["NOTE_TIMING", "NOTE_TYPE", "HOLD_OVERLAP", "PLAYABILITY", "LINE_MOTION", "VISUAL_OCCLUSION", "DIFFICULTY", "OTHER"]},
+          "severity": {"enum": ["LOW", "MEDIUM", "HIGH"]},
+          "comment": {"type": "string"},
+          "action": {"enum": ["REGENERATE_SEGMENT", "MANUAL_EDIT", "IGNORE", "NONE"]}
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "$defs": {"score": {"type": "number", "minimum": 0, "maximum": 5, "multipleOf": 0.5}},
+  "additionalProperties": false
+}

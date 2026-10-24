@@ -1,0 +1,10 @@
+# V5 架构设计示例，phiaimadeos.mcp_server 尚未实现。
+# 当前离线原型请使用 codex_mcp_v51.example.toml 中的 pamos_mcp.server。
+# 拷贝到你自己信任的 Codex 项目配置或 ~/.codex/config.toml。不要写真实 token。
+[mcp_servers.pamos_rpe]
+command = "python"
+args = ["-m", "phiaimadeos.mcp_server"]
+cwd = "/absolute/path/to/PhiAiMadeOs"
+enabled = true
+startup_timeout_sec = 20
+tool_timeout_sec = 90

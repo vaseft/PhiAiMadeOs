@@ -1,0 +1,13 @@
+{
+  "META": {"RPEVersion": 170, "name": "Fixture-only", "composer":"", "offset":0},
+  "BPMList": [{"bpm": 120,"startTime":[0,0,1]}],
+  "PAMOs_lane_positions": [-450,-150,150,450],
+  "judgeLineList": [{"Name":"Static","father":-1,
+    "eventLayers": [{"moveXEvents":[{"startTime":[0,0,1],"endTime":[1,0,1],"start":0,"end":0}],
+      "moveYEvents":[{"startTime":[0,0,1],"endTime":[1,0,1],"start":0,"end":0}],
+      "rotateEvents":[{"startTime":[0,0,1],"endTime":[1,0,1],"start":0,"end":0}]}],
+    "notes":[{"type":1,"startTime":[1,0,1],"endTime":[1,0,1],"positionX":-450,"above":1,"isFake":0},
+             {"type":2,"startTime":[2,0,1],"endTime":[3,0,1],"positionX":150,"above":1,"isFake":0}]}],
+  "blockAreaList":[],
+  "x-unknown": {"preserve":true}
+}

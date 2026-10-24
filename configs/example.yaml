@@ -1,0 +1,100 @@
+# 通用示例：RTX 5060 8GB 请优先使用 configs/rtx5060_8gb.yaml。
+project:
+  name: PhiAiMadeOs
+  local_only: true
+  locale: zh-CN
+  seed: 20261024
+
+paths:
+  input_roots: ["./data/raw"]
+  derived: "./data/derived"
+  models: "./models/registry"
+  exports: "./exports"
+  sqlite: "./data/phiaimadeos.sqlite3"
+
+runtime:
+  cpu_fallback: true
+  max_zip_compressed_mb: 300
+  max_zip_expanded_mb: 1500
+  max_files_per_zip: 128
+  max_song_duration_seconds: 900
+  max_notes_per_chart: 30000
+  max_judge_lines: 64
+  bind_host: "127.0.0.1"
+
+features:
+  sample_rate: 22050
+  mono: true
+  hop_length: 256
+  n_fft: 2048
+  store_onset_strength: true
+  store_rms: true
+  store_chroma: true
+  pretrained_audio_encoder: null  # 提供具体授权/权重和计算环境后再开启
+  feature_version: "features_v1"
+
+dataset:
+  ir_version: "1.0.0"
+  splits: {train: 0.8, validation: 0.1, test: 0.1}
+  group_by_song_fingerprint: true
+  require_explicit_training_permission: true
+  disallow_test_leakage: true
+  primary_window_bars: 8
+  context_bars_each_side: 2
+
+training:
+  device: "auto"
+  precision: "auto"
+  architecture: "transformer_small"
+  hidden_size: 192
+  layers: 4
+  heads: 4
+  microbatch_size: 1
+  grad_accum_steps: 16
+  learning_rate: 0.0002
+  epochs: 50  # 早停条件/数据情况可调整
+  early_stopping_patience: 8
+  deterministic: true
+  save_best: true
+  save_last: true
+  use_frozen_audio_encoder: true
+
+inference:
+  desired_difficulty: 14.0
+  max_generated_lines: 8
+  seed: 1234
+  preserve_global_section_plan: true
+  allow_safe_template_fallback: true
+
+audit:
+  enabled: true
+  use_neural_models: false
+  allowed_engines: ["numpy", "scipy", "librosa_classical", "geometry", "schema"]
+  onset_match_window_ms: 70        # 需要人谱样本校准
+  offset_suspect_median_ms: 80     # 仅 WARN，禁止自动改 offset
+  min_beat_estimate_confidence: 0.55
+  silent_rms_threshold_dbfs: -50   # 需样本校准
+  suspicious_dense_notes_per_s: 8 # 仅 WARN
+  screen_aspect_ratio: 1.7777777778
+  check_parent_cycles: true
+  run_export_roundtrip: true
+  hard_block_on_unknown_export_loss: true
+
+review:
+  manual_score_required: true
+  allow_warn_override_with_reason: true
+  block_hard_error_approval: true
+  scores_0_to_5:
+    rhythm: 25
+    playability: 25
+    readability: 20
+    line_motion: 15
+    difficulty_fit: 10
+    completeness: 5
+  require_playtest_for_playtest_confirmed: true
+
+export:
+  primary_format: "rpe_zip"
+  write_info_yml: true
+  keep_local_only_by_default: true
+  export_requires_human_approval: true

@@ -1,0 +1,12 @@
+{
+  "chart_id": "demo-chart",
+  "version_id": "model_original_v0",
+  "provider_id": "openai-compatible-example",
+  "mode": "suggest",
+  "confirm_external_upload": true,
+  "segments": [
+    "bar_9_to_12"
+  ],
+  "user_instruction": "优先保持可玩性；存在不确定性时只提出人工复核建议。",
+  "max_cost_usd": 0.5
+}

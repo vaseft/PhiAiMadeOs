@@ -1,0 +1,282 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.phiaimadeos.invalid/schemas/generation_request.schema.json",
+  "title": "PhiAiMadeOs GenerationRequestV3+V4 (backward compatible)",
+  "type": "object",
+  "required": [
+    "condition_schema_version",
+    "music_asset_id",
+    "model_bundle_id",
+    "difficulty_class",
+    "difficulty_value",
+    "chart_mode",
+    "key_count",
+    "performance_intensity",
+    "performance_style",
+    "wildness",
+    "generation_priority",
+    "special_features",
+    "strict_playability"
+  ],
+  "properties": {
+    "condition_schema_version": {
+      "const": "3.0.0"
+    },
+    "music_asset_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "model_bundle_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "difficulty_class": {
+      "enum": [
+        "EZ",
+        "HD",
+        "IN",
+        "AT"
+      ]
+    },
+    "difficulty_value": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18
+    },
+    "chart_mode": {
+      "enum": [
+        "regular",
+        "pure_keys",
+        "anomaly"
+      ]
+    },
+    "key_count": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "enum": [
+            4,
+            5,
+            6
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "performance_intensity": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "performance_style": {
+      "enum": [
+        "none",
+        "calm",
+        "standard",
+        "rhythm_linked",
+        "ornate",
+        "experimental"
+      ]
+    },
+    "wildness": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "generation_priority": {
+      "enum": [
+        "playability",
+        "balanced",
+        "performance"
+      ]
+    },
+    "special_features": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[a-z][a-z0-9_]*$"
+      },
+      "maxItems": 12
+    },
+    "strict_playability": {
+      "type": "boolean"
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "target_duration": {
+      "const": "full_song"
+    },
+    "target_engine": {
+      "const": "phira"
+    },
+    "target_engine_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32
+    },
+    "noise_area": {
+      "type": "object",
+      "properties": {
+        "generation_enabled": {
+          "const": false
+        }
+      },
+      "required": [
+        "generation_enabled"
+      ],
+      "additionalProperties": false
+    },
+    "target_runtime": {
+      "type": "object",
+      "properties": {
+        "engine": {
+          "const": "phira_pro"
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "engine",
+        "revision"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "difficulty_class": {
+            "const": "EZ"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "difficulty_value": {
+            "minimum": 0,
+            "maximum": 10
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "difficulty_class": {
+            "const": "HD"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "difficulty_value": {
+            "minimum": 11,
+            "maximum": 14
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "difficulty_class": {
+            "const": "IN"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "difficulty_value": {
+            "minimum": 14,
+            "maximum": 17
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "difficulty_class": {
+            "const": "AT"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "difficulty_value": {
+            "minimum": 15,
+            "maximum": 18
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "chart_mode": {
+            "const": "pure_keys"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "key_count": {
+            "enum": [
+              4,
+              5,
+              6
+            ]
+          },
+          "special_features": {
+            "maxItems": 0
+          },
+          "generation_priority": {
+            "enum": [
+              "playability",
+              "balanced"
+            ]
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "key_count": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "chart_mode": {
+            "enum": [
+              "regular",
+              "pure_keys"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "special_features": {
+            "maxItems": 0
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}

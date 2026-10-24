@@ -1,0 +1,7 @@
+# Put this file's CONTENT at %UserProfile%\.wslconfig in Windows.
+# Do not move the file itself to Linux as if it controlled WSL.
+[wsl2]
+memory=9GB
+swap=6GB
+processors=4
+localhostForwarding=true

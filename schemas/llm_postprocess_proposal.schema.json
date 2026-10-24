@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PAMOs LLM Postprocess Proposal v4",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "request_id",
+    "chart_hash",
+    "segment_hash",
+    "status",
+    "summary",
+    "patches",
+    "review_flags"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "chart_hash": {
+      "type": "string",
+      "minLength": 1
+    },
+    "segment_hash": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "enum": [
+        "proposed",
+        "no_change",
+        "insufficient_evidence"
+      ]
+    },
+    "summary": {
+      "type": "string",
+      "maxLength": 1200
+    },
+    "patches": {
+      "type": "array",
+      "items": {
+        "$ref": "llm_patch.schema.json"
+      },
+      "maxItems": 12
+    },
+    "review_flags": {
+      "type": "array",
+      "maxItems": 15,
+      "items": {
+        "type": "object",
+        "required": [
+          "start_beat",
+          "end_beat",
+          "reason"
+        ],
+        "properties": {
+          "start_beat": {
+            "type": "number",
+            "minimum": 0
+          },
+          "end_beat": {
+            "type": "number",
+            "minimum": 0
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "enum": [
+              "no_change",
+              "insufficient_evidence"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "patches": {
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "proposed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "patches": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}

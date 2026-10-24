@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.phiaimadeos.invalid/schemas/capability_matrix.schema.json",
+  "title": "PhiAiMadeOs Feature capability registry v3",
+  "type": "object",
+  "required": [
+    "registry_version",
+    "engine",
+    "engine_version",
+    "features"
+  ],
+  "properties": {
+    "registry_version": {
+      "const": "3.0.0"
+    },
+    "engine": {
+      "const": "phira"
+    },
+    "engine_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "features": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "feature_id",
+          "capability",
+          "carrier",
+          "evidence",
+          "fallback"
+        ],
+        "properties": {
+          "feature_id": {
+            "type": "string"
+          },
+          "capability": {
+            "enum": [
+              "native_supported",
+              "visual_only",
+              "requires_client_mod",
+              "unsupported",
+              "unknown"
+            ]
+          },
+          "carrier": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "probe_fixture_hash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "probe_result": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fallback": {
+            "enum": [
+              "reject",
+              "remove_with_confirmation",
+              "visual_only"
+            ]
+          },
+          "accessibility_risk": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

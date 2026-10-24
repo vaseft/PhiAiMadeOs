@@ -1,0 +1,488 @@
+{
+  "schema_version": 1,
+  "source_archive": "PhiAiMadeOs_PAMOs_V5_1_RPE_MCP_GitHub_Kit.zip",
+  "source_archive_bytes": 215933,
+  "source_archive_sha256": "0bffed618fc456d9fcac2400bbb59f72d98ad12499a53e53d215e1f483946494",
+  "source_manifest": "docs/imports/V51_SOURCE_MANIFEST.sha256",
+  "source_manifest_verified_files": 95,
+  "source_manifest_excludes_itself": true,
+  "base_develop_commit": "6ad13fd4f2dfa6cd9dc79ad86828687ffa8f7f82",
+  "note": "Hashes describe the recovered ZIP, not integrated or future working-tree files. Destination files may be merged or fixed; Git records their changes. The original Git bundle/history is not imported.",
+  "files": [
+    {
+      "source_path": ".gitattributes",
+      "source_sha256": "dfef7a6fd4a828737a4e5a870eaf1b7f2f8f72867ca2482891db7fbe86b48613",
+      "integrated_path": ".gitattributes"
+    },
+    {
+      "source_path": ".github/workflows/ci.yml",
+      "source_sha256": "008e8446605b4f98ae13fc9d65daa38f12af32dc472664b841b21e03f38d7242",
+      "integrated_path": ".github/workflows/ci.yml"
+    },
+    {
+      "source_path": ".gitignore",
+      "source_sha256": "2f19c6b323accde1dc2e33f5f19679f15a80b7b52c8d461045f340d137331506",
+      "integrated_path": ".gitignore"
+    },
+    {
+      "source_path": "AGENTS.md",
+      "source_sha256": "1692c7ddc72c274800f7c68d2194df2b3e58d16de59fe8aa67236f8269287eae",
+      "integrated_path": "docs/AGENT_V51_DEVELOPMENT.md"
+    },
+    {
+      "source_path": "CODEX_START.md",
+      "source_sha256": "24df8a499fc9bcac1d86beefce155c935774bc19fdc25f5f8a43dfcb88c8be9b",
+      "integrated_path": "docs/legacy/CODEX_V3_START_HERE.md"
+    },
+    {
+      "source_path": "CODEX_V4_START_HERE.md",
+      "source_sha256": "e7bf63e698cca2a92139d76abf63f771acdec649bcb3acb116b156f153204aa0",
+      "integrated_path": "CODEX_V4_START_HERE.md"
+    },
+    {
+      "source_path": "CODEX_V51_START_HERE.md",
+      "source_sha256": "a6f61f63f06dc9f36d19c77873b0568314cfed06fb883f0f6493c26315d89b4f",
+      "integrated_path": "CODEX_V51_START_HERE.md"
+    },
+    {
+      "source_path": "CODEX_V5_START_HERE.md",
+      "source_sha256": "596ab3e8c3977af33e85736a3c2043d9b16cfab007da5f2b52d681999882188c",
+      "integrated_path": "CODEX_V5_START_HERE.md"
+    },
+    {
+      "source_path": "LICENSE",
+      "source_sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+      "integrated_path": "LICENSE"
+    },
+    {
+      "source_path": "README.md",
+      "source_sha256": "02f74c562a70fc76d91c9e097f9f8bda4aa9baa5b3342dd6fb07f4aead1d9b83",
+      "integrated_path": "README.md"
+    },
+    {
+      "source_path": "V3_CHANGELOG.md",
+      "source_sha256": "4f93d0ac37c99345503853b04674f0816e480373c33f876cd6fd8a23e9343ddd",
+      "integrated_path": "V3_CHANGELOG.md"
+    },
+    {
+      "source_path": "V4_CHANGELOG.md",
+      "source_sha256": "eafa2e0228382cbc3aa649a75745d3e3829187f5344220edc9734a8530b82d9a",
+      "integrated_path": "V4_CHANGELOG.md"
+    },
+    {
+      "source_path": "V5_1_CHANGELOG.md",
+      "source_sha256": "0252213f489345662c95b76ad0e5d0c703a8a117f72c36dfcdb7e301abfebfb5",
+      "integrated_path": "V5_1_CHANGELOG.md"
+    },
+    {
+      "source_path": "V5_CHANGELOG.md",
+      "source_sha256": "6210f7b300d1825eea63241d8243727c03873590059b4a5af5a84241a2289087",
+      "integrated_path": "V5_CHANGELOG.md"
+    },
+    {
+      "source_path": "configs/codex_mcp.example.toml",
+      "source_sha256": "b27d81695679246367b411ee6fe7d9f4f405bf7468e3ccf819b610c473080842",
+      "integrated_path": "configs/codex_mcp.example.toml"
+    },
+    {
+      "source_path": "configs/codex_mcp_v51.example.toml",
+      "source_sha256": "7ba5745651f0334e55b851c61c43753026c33a25a4dd73db115a791e7270651c",
+      "integrated_path": "configs/codex_mcp_v51.example.toml"
+    },
+    {
+      "source_path": "configs/example.yaml",
+      "source_sha256": "8c50662f2b5d6303083d078aa2435a5a7208083168f4265339189c144c4f33b6",
+      "integrated_path": "configs/example.yaml"
+    },
+    {
+      "source_path": "configs/generation_v3.yaml",
+      "source_sha256": "384f093ccea5fc9fb5019eb3c3f42c1552ae65e40dab68dc4eaff0b607c36ad1",
+      "integrated_path": "configs/generation_v3.yaml"
+    },
+    {
+      "source_path": "configs/mcp_bridge_v5.example.yaml",
+      "source_sha256": "2543d368e8cf8d951b797f11cac0c14d24f522a3bf5e852b223109ebf6895bdf",
+      "integrated_path": "configs/mcp_bridge_v5.example.yaml"
+    },
+    {
+      "source_path": "configs/postprocess_v4.yaml",
+      "source_sha256": "1bae72dc22bc7cd2cba42682b9618e8450696db702360787f0d1a69add3fbe9a",
+      "integrated_path": "configs/postprocess_v4.yaml"
+    },
+    {
+      "source_path": "configs/rtx5060_8gb.yaml",
+      "source_sha256": "ff1a79cafe73d8b08d0644dc0fb4f989ce0122db3238ebb70e3f2248a523ea5c",
+      "integrated_path": "configs/rtx5060_8gb.yaml"
+    },
+    {
+      "source_path": "configs/upstreams.lock.json",
+      "source_sha256": "8ae5a20bc04ee23544eddc3566d598a2a23545a58e3f9daeb4f2c1f902edb904",
+      "integrated_path": "configs/upstreams.lock.json"
+    },
+    {
+      "source_path": "configs/wsl_16gb_host.wslconfig",
+      "source_sha256": "b8b81a2de60319f6251c0a66db12299b8466f5069ceb7bd2d18b35be01b6d5d7",
+      "integrated_path": "configs/wsl_16gb_host.wslconfig"
+    },
+    {
+      "source_path": "docs/01_PRODUCT_ARCHITECTURE.md",
+      "source_sha256": "28cb7e60aabeb30dbbd065ab682af091fa41570ed1d47d1346fde2aa6b683186",
+      "integrated_path": "docs/01_PRODUCT_ARCHITECTURE.md"
+    },
+    {
+      "source_path": "docs/02_DATASET_FORMATS.md",
+      "source_sha256": "17e3c3f5516eecdc8b84c03598beafac92cf6ed2a8916df957d9850533b92f19",
+      "integrated_path": "docs/02_DATASET_FORMATS.md"
+    },
+    {
+      "source_path": "docs/03_MODEL_TRAINING.md",
+      "source_sha256": "323165359582806dd03fe95df28ae2f394abc25aa9d09f19ed451fcb83e2ca43",
+      "integrated_path": "docs/03_MODEL_TRAINING.md"
+    },
+    {
+      "source_path": "docs/04_NON_AI_AUDIT.md",
+      "source_sha256": "0bfb7bb11eff834e6a1530072fba28d5bb8617aa45a73466aca2c65cbc2b5b6b",
+      "integrated_path": "docs/04_NON_AI_AUDIT.md"
+    },
+    {
+      "source_path": "docs/05_REVIEW_UI_API.md",
+      "source_sha256": "83f4ce1a3d48aef785cbb6ebf9f9930bff5259fa6b56ad9524c2b9602eee0d82",
+      "integrated_path": "docs/05_REVIEW_UI_API.md"
+    },
+    {
+      "source_path": "docs/06_MILESTONES.md",
+      "source_sha256": "726cd74db73e87c4abfdc624943984a3208d873f36dd43b15c60c93ab62801c8",
+      "integrated_path": "docs/06_MILESTONES.md"
+    },
+    {
+      "source_path": "docs/07_TESTING_ACCEPTANCE.md",
+      "source_sha256": "bf4ac46a8dad8248e578f412290156315c477884a5c354ac5c4708fa3afab873",
+      "integrated_path": "docs/07_TESTING_ACCEPTANCE.md"
+    },
+    {
+      "source_path": "docs/08_REFERENCES_LEGAL.md",
+      "source_sha256": "aa3ff39799ee433c1e0d7eb9bb55ccfed2398af5218611a09ea14f4be40c89ac",
+      "integrated_path": "docs/08_REFERENCES_LEGAL.md"
+    },
+    {
+      "source_path": "docs/09_RTX5060_8GB_DEPLOYMENT.md",
+      "source_sha256": "4ccbeeb63215b87459e3d510f2534e7aef772a7259fa2c48690f43c39642d375",
+      "integrated_path": "docs/09_RTX5060_8GB_DEPLOYMENT.md"
+    },
+    {
+      "source_path": "docs/10_LOW_VRAM_TRAINING_BLUEPRINT.md",
+      "source_sha256": "a73102e6cf7e9cbb276f66a0f148c149f1c55e3c155b6a5e143cf566839e4426",
+      "integrated_path": "docs/10_LOW_VRAM_TRAINING_BLUEPRINT.md"
+    },
+    {
+      "source_path": "docs/11_AGENT_EXECUTION_AND_GATES.md",
+      "source_sha256": "c24a074233e2646062d280afa388c7461e7c971c4cc48238d3a0515feca8a9f1",
+      "integrated_path": "docs/11_AGENT_EXECUTION_AND_GATES.md"
+    },
+    {
+      "source_path": "docs/12_GENERATION_MODES_AND_CONDITIONING.md",
+      "source_sha256": "9465026fbf9cda3ff55673018d943a1e400bab19a4acaa828e39ce18feeb5fda",
+      "integrated_path": "docs/12_GENERATION_MODES_AND_CONDITIONING.md"
+    },
+    {
+      "source_path": "docs/13_LANE_MODE_4K5K6K.md",
+      "source_sha256": "070738f3f822f7bfce46b5e4188da041b34428a25219370b4bd42a179bf4af1b",
+      "integrated_path": "docs/13_LANE_MODE_4K5K6K.md"
+    },
+    {
+      "source_path": "docs/14_ANOMALY_FEATURES_AND_COMPATIBILITY.md",
+      "source_sha256": "4a024283ffc669977c79ab345bc888ee4c618f3e55baa33cf5ab890c96802b00",
+      "integrated_path": "docs/14_ANOMALY_FEATURES_AND_COMPATIBILITY.md"
+    },
+    {
+      "source_path": "docs/15_CONDITIONAL_TRAINING_AND_DATA_LABELS.md",
+      "source_sha256": "9121885381c800f82c488ab85911f772db82005baf8e1af7d25c001b1a9eb318",
+      "integrated_path": "docs/15_CONDITIONAL_TRAINING_AND_DATA_LABELS.md"
+    },
+    {
+      "source_path": "docs/16_GENERATION_PAGE_API_AND_STORAGE.md",
+      "source_sha256": "bfdab807d26e3a8bf875d67452af9da0ec9e290d5a714abfdd640914d06d7497",
+      "integrated_path": "docs/16_GENERATION_PAGE_API_AND_STORAGE.md"
+    },
+    {
+      "source_path": "docs/17_V3_VALIDATION_AND_MODE_MATRIX.md",
+      "source_sha256": "029a8bfd463b5b6055ac24cc982a687d7da5d1eaa0a4a01b9f7229a77059c200",
+      "integrated_path": "docs/17_V3_VALIDATION_AND_MODE_MATRIX.md"
+    },
+    {
+      "source_path": "docs/18_AGENT_V3_EXECUTION_PLAN.md",
+      "source_sha256": "c3a241eaf542a2b62297a35123e8f848f15c069f33fc951413753b4cd8e55df2",
+      "integrated_path": "docs/18_AGENT_V3_EXECUTION_PLAN.md"
+    },
+    {
+      "source_path": "docs/19_PHIRA_PRO_CODE_INTEGRATION.md",
+      "source_sha256": "04f044e456b0ce4379f9267814fce05532481bff37a2ff4908fd1ecc647aab53",
+      "integrated_path": "docs/19_PHIRA_PRO_CODE_INTEGRATION.md"
+    },
+    {
+      "source_path": "docs/20_NOISE_AREA_DEFERRED.md",
+      "source_sha256": "899e08f576bb0a5a5b0082baff655db86e5a0efdff0bec50e2f32d46654744d5",
+      "integrated_path": "docs/20_NOISE_AREA_DEFERRED.md"
+    },
+    {
+      "source_path": "docs/21_LLM_POSTPROCESS_ARCHITECTURE.md",
+      "source_sha256": "cbbc05a345c5e7c935741e445ba571533e2dade2d2d79a75dd76d8ffcb5ed0c2",
+      "integrated_path": "docs/21_LLM_POSTPROCESS_ARCHITECTURE.md"
+    },
+    {
+      "source_path": "docs/22_LLM_PATCH_PROTOCOL_AND_VALIDATION.md",
+      "source_sha256": "73a12d70ed89a74f7137699d31a2a83e5d070bea1295f271db19c10345f2c217",
+      "integrated_path": "docs/22_LLM_PATCH_PROTOCOL_AND_VALIDATION.md"
+    },
+    {
+      "source_path": "docs/23_LLM_PROVIDER_DEPLOYMENT_AND_SECURITY.md",
+      "source_sha256": "d98f9e907cb9bc967a3c1e4d67c1529e79fde40342a3ac8db31a32f753eb0621",
+      "integrated_path": "docs/23_LLM_PROVIDER_DEPLOYMENT_AND_SECURITY.md"
+    },
+    {
+      "source_path": "docs/24_V4_EXECUTION_GATES.md",
+      "source_sha256": "43c312546883f60746dabd566d3a922d009d9b55282294397731b3a91435c771",
+      "integrated_path": "docs/24_V4_EXECUTION_GATES.md"
+    },
+    {
+      "source_path": "docs/25_V4_REFERENCES_AND_LICENSES.md",
+      "source_sha256": "a78c61a9cf705e84c8861c540e89efa21aa556d59bc132296d4fa6fca702e703",
+      "integrated_path": "docs/25_V4_REFERENCES_AND_LICENSES.md"
+    },
+    {
+      "source_path": "docs/26_RPE_NEXT_MCP_ARCHITECTURE.md",
+      "source_sha256": "d7f17cb56301652a296b89f6d9c286c2fc2d526e9cfeb3ba9129b08a2ae30fe0",
+      "integrated_path": "docs/26_RPE_NEXT_MCP_ARCHITECTURE.md"
+    },
+    {
+      "source_path": "docs/27_RPE_MCP_TOOL_CONTRACTS.md",
+      "source_sha256": "25274f2fa159df5a3e377ecadaf3f4aa08bb6f79a5f0769611bea8f441776e69",
+      "integrated_path": "docs/27_RPE_MCP_TOOL_CONTRACTS.md"
+    },
+    {
+      "source_path": "docs/28_GITHUB_VERSION_CONTROL.md",
+      "source_sha256": "ea0df6300bde21ace4e706c9ceb722a7612ce5324db0a82edf7f9c26056abd62",
+      "integrated_path": "docs/28_GITHUB_VERSION_CONTROL.md"
+    },
+    {
+      "source_path": "docs/29_LLM_MCP_INTERACTION_GUIDE.md",
+      "source_sha256": "747a758d677130784fdecc282c6fbe44ec52aa271c499b9bc323b0b7285d54d0",
+      "integrated_path": "docs/29_LLM_MCP_INTERACTION_GUIDE.md"
+    },
+    {
+      "source_path": "docs/30_V5_ACCEPTANCE_AND_GITHUB_LINK.md",
+      "source_sha256": "7f172a9f393ba171fa22a12f7e465df0a7d5a066e7d88fc905c4939a91b6219c",
+      "integrated_path": "docs/30_V5_ACCEPTANCE_AND_GITHUB_LINK.md"
+    },
+    {
+      "source_path": "docs/31_V51_RUNNABLE_OFFLINE_MCP.md",
+      "source_sha256": "4f3f62aa104e8bea0bf3a067ebb1d6d71b363bb86d940463b90f67a65156a0e2",
+      "integrated_path": "docs/31_V51_RUNNABLE_OFFLINE_MCP.md"
+    },
+    {
+      "source_path": "examples/generation_anomaly.json",
+      "source_sha256": "fd03a9d8ae3db1625904fd72deab67e2cb7e27aa096138c8c55015e3c6ff2bd9",
+      "integrated_path": "examples/generation_anomaly.json"
+    },
+    {
+      "source_path": "examples/generation_pure_4k.json",
+      "source_sha256": "cea43c4f410dfdc921073729a233b7bbc945655a37c4a393d6449c6f7d378d33",
+      "integrated_path": "examples/generation_pure_4k.json"
+    },
+    {
+      "source_path": "examples/generation_pure_5k.json",
+      "source_sha256": "6e8e1173a49b67c7669b85386f21c799bb2df13a9c189cea7a3a4c0930be7913",
+      "integrated_path": "examples/generation_pure_5k.json"
+    },
+    {
+      "source_path": "examples/generation_pure_6k.json",
+      "source_sha256": "f0eef03fd1039fa65f6425617afb8ebb4e06bb8185818ae60a90549947acefee",
+      "integrated_path": "examples/generation_pure_6k.json"
+    },
+    {
+      "source_path": "examples/generation_regular.json",
+      "source_sha256": "b597083791a46907778b97b76a5ea224b5bfb90ee4dec5b5675c71639e4f77ba",
+      "integrated_path": "examples/generation_regular.json"
+    },
+    {
+      "source_path": "examples/llm_proposal_no_change.json",
+      "source_sha256": "46af3c2daa330bd767f6fe87ab4fa427db0c622e403935f45b812baa8395afd0",
+      "integrated_path": "examples/llm_proposal_no_change.json"
+    },
+    {
+      "source_path": "examples/llm_proposal_one_patch.json",
+      "source_sha256": "5f91689b7100fa81fe88369b16e71184d8754fe59ac22f839c2e68ef5bafd6b1",
+      "integrated_path": "examples/llm_proposal_one_patch.json"
+    },
+    {
+      "source_path": "examples/postprocess_request_suggest.json",
+      "source_sha256": "0170bf868bbad90f43f95b962815bcfc62aa4c95c5fda9f1631de2e7213e6302",
+      "integrated_path": "examples/postprocess_request_suggest.json"
+    },
+    {
+      "source_path": "examples/review_example.json",
+      "source_sha256": "cfad5ea921718e4f27c83a8d1d4ccdbd5c794a6efd05fdac991cacecbc9fd8e6",
+      "integrated_path": "examples/review_example.json"
+    },
+    {
+      "source_path": "examples/rpe_mcp_patch_invalid_noise.json",
+      "source_sha256": "0d2b0b6b31248cde346803877f4f8dc2be862f8f119367ae213c371ee7f520d0",
+      "integrated_path": "examples/rpe_mcp_patch_invalid_noise.json"
+    },
+    {
+      "source_path": "examples/rpe_mcp_patch_pure4k.json",
+      "source_sha256": "81c45155013a3ed9e0790dde6c2dc6588ef7760f6cc7165ca1c32669869728fc",
+      "integrated_path": "examples/rpe_mcp_patch_pure4k.json"
+    },
+    {
+      "source_path": "fixtures/rpe_minimal.json",
+      "source_sha256": "3a0a4700de1da8a0417b7892330eed108df001640929f2b66dc3047599cb194f",
+      "integrated_path": "fixtures/rpe_minimal.json"
+    },
+    {
+      "source_path": "pamos_mcp/__init__.py",
+      "source_sha256": "835224ac91b5aa51fb6df182b63ab698322a28cf57d417367433c08641e2f41f",
+      "integrated_path": "pamos_mcp/__init__.py"
+    },
+    {
+      "source_path": "pamos_mcp/approve.py",
+      "source_sha256": "d4832e8128300e801a6f8b0aadcb40154a72c28de9e0d937fbdcc5e7002f7638",
+      "integrated_path": "pamos_mcp/approve.py"
+    },
+    {
+      "source_path": "pamos_mcp/core.py",
+      "source_sha256": "83984a93c55c60251ca10082efd5fe8cd8f7d5639856d64ab66574aa0514079d",
+      "integrated_path": "pamos_mcp/core.py"
+    },
+    {
+      "source_path": "pamos_mcp/server.py",
+      "source_sha256": "7f9660891c24dbbfdbb560068a4653b19d2eca100398ebd8db3e582466be3fa8",
+      "integrated_path": "pamos_mcp/server.py"
+    },
+    {
+      "source_path": "prompts/LLM_CHART_REFINER_SYSTEM_ZH.md",
+      "source_sha256": "df05717dacf99493fb4669a66960d9f412dd03a03cf8e40f3be8d8541b733b87",
+      "integrated_path": "prompts/LLM_CHART_REFINER_SYSTEM_ZH.md"
+    },
+    {
+      "source_path": "prompts/LLM_CHART_REFINER_USER_TEMPLATE.md",
+      "source_sha256": "9bc2419a17174c11dbc573ac197072590bdbcfbe7b1cc44529433701243dc027",
+      "integrated_path": "prompts/LLM_CHART_REFINER_USER_TEMPLATE.md"
+    },
+    {
+      "source_path": "prompts/PAMOS_RPE_MCP_EDITOR_SYSTEM_ZH.md",
+      "source_sha256": "44f76c74ced83d9f0168287ed86e7141e690519dc977d1b4d9346e7713a35b2f",
+      "integrated_path": "prompts/PAMOS_RPE_MCP_EDITOR_SYSTEM_ZH.md"
+    },
+    {
+      "source_path": "prompts/PAMOS_RPE_MCP_EDITOR_USER_TEMPLATE.md",
+      "source_sha256": "e0b23c7ab38dbbdf948bc2e83a1aa0ed0e311c25ce52966912b9cd81eee32f62",
+      "integrated_path": "prompts/PAMOS_RPE_MCP_EDITOR_USER_TEMPLATE.md"
+    },
+    {
+      "source_path": "requirements/base.txt",
+      "source_sha256": "e07076b76b2e0c6427d73b9b32923a94da64530caaf5822ee7209106e9326a1f",
+      "integrated_path": "requirements/base.txt"
+    },
+    {
+      "source_path": "requirements/llm_api.txt",
+      "source_sha256": "41b8b4864c7725960852cdc14bc79cf8d8d41df0a4f547b70b0482310da533e4",
+      "integrated_path": "requirements/llm_api.txt"
+    },
+    {
+      "source_path": "requirements/mcp_v51.txt",
+      "source_sha256": "85a71b9bb721ffd6eaeae4cf63342cfe8189b1b095166753f89c3c3a58ae8cc1",
+      "integrated_path": "requirements/mcp_v51.txt"
+    },
+    {
+      "source_path": "schemas/audit_report.schema.json",
+      "source_sha256": "ae5986d630928c5b790944a47c6c4c29f26b20b9b4f92c2f3dab990494568da6",
+      "integrated_path": "schemas/audit_report.schema.json"
+    },
+    {
+      "source_path": "schemas/capability_matrix.schema.json",
+      "source_sha256": "6880e8e384902124ff1a602bdee6ed773efb31ea79b8fdf76aa518daec6e32ca",
+      "integrated_path": "schemas/capability_matrix.schema.json"
+    },
+    {
+      "source_path": "schemas/chart_ir.schema.json",
+      "source_sha256": "7bbe2368636a063e8ede62d7460732c05913d2b4f1eeb527c05ca796e5ec24db",
+      "integrated_path": "schemas/chart_ir.schema.json"
+    },
+    {
+      "source_path": "schemas/condition_label.schema.json",
+      "source_sha256": "79c648738b5ec8efa5a0b47e319869e75c5802c78b4c722aad7bf98776c189f1",
+      "integrated_path": "schemas/condition_label.schema.json"
+    },
+    {
+      "source_path": "schemas/generation_request.schema.json",
+      "source_sha256": "3f85d0dc21a7db9799c99d7bd1d9aba8ef4cafacac9cf2e605bae7a5c81da693",
+      "integrated_path": "schemas/generation_request.schema.json"
+    },
+    {
+      "source_path": "schemas/llm_patch.schema.json",
+      "source_sha256": "397980a0ef49aad1c924c8b2707fda365f6f99ef61e667866a5c6798f2f28a18",
+      "integrated_path": "schemas/llm_patch.schema.json"
+    },
+    {
+      "source_path": "schemas/llm_postprocess_proposal.schema.json",
+      "source_sha256": "7ff9173a6efa38022e26a983fe562996767f5a7f8b379dfcf4951a92b1763fbe",
+      "integrated_path": "schemas/llm_postprocess_proposal.schema.json"
+    },
+    {
+      "source_path": "schemas/llm_segment_payload.schema.json",
+      "source_sha256": "08ee76844fda4976233a6197bb08e58821886a76f405e6c0fb4b320c6fa354c5",
+      "integrated_path": "schemas/llm_segment_payload.schema.json"
+    },
+    {
+      "source_path": "schemas/postprocess_request.schema.json",
+      "source_sha256": "5cc20e7c81196c2bec5d51a68dd2cf028aa8b8671d531b20a042c30e6fc3cd64",
+      "integrated_path": "schemas/postprocess_request.schema.json"
+    },
+    {
+      "source_path": "schemas/review.schema.json",
+      "source_sha256": "5f188a9c2fb0fd40100126b6f7ec60fcec750de11971fbf3f27279c93a444d96",
+      "integrated_path": "schemas/review.schema.json"
+    },
+    {
+      "source_path": "schemas/rpe_mcp_patch_request.schema.json",
+      "source_sha256": "4ce11439f138aefc13b73c594dacc24edcd3e4e478b7da69311efd199b8e74d8",
+      "integrated_path": "schemas/rpe_mcp_patch_request.schema.json"
+    },
+    {
+      "source_path": "scripts/benchmark_tiny_train.py",
+      "source_sha256": "db773836dbbf4cf713c7e8e106301a2e7d1f7c4916561b696e82c4f0e0664cc4",
+      "integrated_path": "scripts/benchmark_tiny_train.py"
+    },
+    {
+      "source_path": "scripts/diagnose_hardware.py",
+      "source_sha256": "17992e6b08a9d747964d5f0c0b9edce3f9e7c658840c3b345eb966e3f2a2c396",
+      "integrated_path": "scripts/diagnose_hardware.py"
+    },
+    {
+      "source_path": "scripts/setup_git_repository.sh",
+      "source_sha256": "0a1c5e76892b1b289a678e8023f460e244cc5f5987635ab9223c4629889f545e",
+      "integrated_path": "scripts/setup_git_repository.sh"
+    },
+    {
+      "source_path": "scripts/validate_v3_contracts.py",
+      "source_sha256": "2d9c5d4e1c9b3ea8d6bf7ef3b783137d1e1a87a05c33b3fe0353a003d544f482",
+      "integrated_path": "scripts/validate_v3_contracts.py"
+    },
+    {
+      "source_path": "scripts/validate_v4_contracts.py",
+      "source_sha256": "6aa05216b1c79e6f3fc7ebffc121840cf9e29395bfad149e6162af6fbf6f75d8",
+      "integrated_path": "scripts/validate_v4_contracts.py"
+    },
+    {
+      "source_path": "scripts/validate_v5_contracts.py",
+      "source_sha256": "1ae2d19af53cd0ae6d14e94160457b2739bd7247ae925bad162d786a5c3f0b58",
+      "integrated_path": "scripts/validate_v5_contracts.py"
+    },
+    {
+      "source_path": "tests/test_offline_mcp_core.py",
+      "source_sha256": "d99144740d4dda6a4d6ded197a6b716660f873c586d7baa02f3301df6edbb240",
+      "integrated_path": "tests/test_offline_mcp_core.py"
+    }
+  ]
+}

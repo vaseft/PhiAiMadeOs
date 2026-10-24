@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PAMOs PostprocessRequest v4",
+  "type": "object",
+  "required": [
+    "chart_id",
+    "version_id",
+    "provider_id",
+    "mode",
+    "confirm_external_upload",
+    "segments",
+    "max_cost_usd"
+  ],
+  "properties": {
+    "chart_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "provider_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mode": {
+      "enum": [
+        "off",
+        "suggest",
+        "apply_safe",
+        "human_select"
+      ]
+    },
+    "confirm_external_upload": {
+      "type": "boolean"
+    },
+    "segments": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 12
+    },
+    "user_instruction": {
+      "type": "string",
+      "maxLength": 2000
+    },
+    "max_cost_usd": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "mode": {
+            "enum": [
+              "suggest",
+              "apply_safe",
+              "human_select"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "confirm_external_upload": {
+            "const": true
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}

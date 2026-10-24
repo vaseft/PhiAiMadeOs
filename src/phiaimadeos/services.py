@@ -4,7 +4,7 @@ import math
 from pathlib import Path
 from .settings import get_settings, atomic_json, file_hash, new_id, now
 from .store import Store
-from .formats import chart_hash, chart_to_ir, read_chart
+from .formats import chart_hash, chart_to_ir, read_chart, canonical_bytes, MAX_JSON_BYTES
 
 LICENSES = {"explicit_permitted", "restricted", "unknown"}
 ACTIONS = {"local_research", "training", "distribution"}
@@ -35,10 +35,12 @@ def load_candidate(candidate_id, store=None):
 
 def create_candidate(chart, conditions, music_asset_id=None, parent_id=None, source="baseline_only", manifest=None, store=None):
     store = store or Store()
+    if len(canonical_bytes(chart)) > MAX_JSON_BYTES:
+        raise ValueError("候选谱面超过32 MiB，未创建不可再次读取的版本")
     chart_to_ir(chart, conditions.get("chart_mode", "regular"), conditions.get("key_count"))
     identifier = new_id()
     path = store.settings.data_dir / "candidates" / identifier / "chart.json"
-    atomic_json(path, chart)
+    atomic_json(path, chart, compact=True)
     record = store.put("candidates", {
         "id": identifier, "music_asset_id": music_asset_id, "chart_mode": conditions.get("chart_mode", "regular"),
         "key_count": conditions.get("key_count"), "conditions": conditions, "parent_id": parent_id,

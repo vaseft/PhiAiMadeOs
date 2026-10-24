@@ -19,10 +19,11 @@ def new_id():
     return uuid.uuid4().hex
 
 
-def atomic_json(path, value):
+def atomic_json(path, value, *, compact=False):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    data = json.dumps(value, ensure_ascii=False, sort_keys=True, allow_nan=False, indent=2).encode("utf-8")
+    options = {"separators": (",", ":")} if compact else {"indent": 2}
+    data = json.dumps(value, ensure_ascii=False, sort_keys=True, allow_nan=False, **options).encode("utf-8")
     fd, name = tempfile.mkstemp(prefix=".pamos-", dir=path.parent)
     try:
         with os.fdopen(fd, "wb") as handle:

@@ -6,7 +6,7 @@
 
 Windows 已部署目录可双击 `Start-PAMOs.cmd`，在 `http://127.0.0.1:8765` 使用本机工作台。恢复依赖与界面构建使用 `Install-PAMOs.cmd`。参见 [本地工作台使用与边界](docs/35_LOCAL_WORKBENCH.md)、[本轮交付记录](docs/36_WORKBENCH_DELIVERY.md) 和 [Windows 环境](docs/34_WINDOWS_ENVIRONMENT.md)。
 
-只需要训练控制时，双击 `Start-PAMOs-Training.cmd` 打开仅含“训练”“暂停训练”和进度条的独立窗口。打开不自动训练；训练继续一轮，暂停保存断点，下一次继续。见 [简洁训练窗口](docs/41_SIMPLE_TRAINER.md)。
+只需要训练控制时，双击 `Start-PAMOs-Training.cmd` 打开独立窗口：训练、暂停、进度条、自动继续开关和三个阶段的真实损失曲线。打开不自动训练；训练继续一轮，开启自动继续则每轮结束续训，暂停保存断点并关闭自动继续。见 [简洁训练窗口](docs/41_SIMPLE_TRAINER.md)。
 
 用户明确提供的本机谱面库可通过 [批量导入入口](docs/37_LOCAL_LIBRARY_IMPORT.md) 登记：支持原生 Phigros v1/v3 向工作台结构转换，音乐精确哈希去重，原始 JSON/媒体与小数/特殊难度保留。超出转换能力的项目单独标记仅存档；导入不自动授权训练、不开始训练或认证客户端兼容。
 

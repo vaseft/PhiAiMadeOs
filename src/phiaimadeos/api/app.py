@@ -1,5 +1,6 @@
 from __future__ import annotations
 from contextlib import asynccontextmanager
+import asyncio
 import json
 import math
 import mimetypes
@@ -43,7 +44,12 @@ def create_app():
     @asynccontextmanager
     async def lifespan(app):
         jobs.recover()
-        yield
+        auto_task = asyncio.create_task(simple_trainer.watch())
+        try:
+            yield
+        finally:
+            auto_task.cancel()
+            await asyncio.gather(auto_task, return_exceptions=True)
         await bridge.disconnect()
         await jobs.close()
         mcp_token_path.unlink(missing_ok=True)
@@ -498,6 +504,14 @@ def create_app():
     @app.post("/api/v1/trainer/pause")
     async def trainer_pause():
         return await simple_trainer.pause()
+
+    @app.post("/api/v1/trainer/auto")
+    async def trainer_auto(payload: dict):
+        return await simple_trainer.set_auto(payload.get("enabled"))
+
+    @app.get("/api/v1/trainer/analysis")
+    def trainer_analysis():
+        return simple_trainer.analysis()
 
     @app.post("/api/v1/models/{model_id}/promote")
     def promote(model_id: str, payload: dict):

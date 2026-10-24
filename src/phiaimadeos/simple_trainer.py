@@ -7,8 +7,10 @@ import os
 import shutil
 
 from .jobs import GPU_KINDS
-from .settings import atomic_json, file_hash, new_id, now
+from .settings import file_hash, new_id, now
+from .training import _atomic_json as atomic_json
 from .training_runtime import recommended_runtime
+from .training_analysis import TrainingAnalysis
 
 ACTIVE = {"queued", "running", "cancelling"}
 
@@ -19,6 +21,7 @@ class SimpleTrainer:
         self.settings = store.settings
         self.state_path = self.settings.root / ".local/simple-trainer.json"
         self.lock = asyncio.Lock()
+        self.curves = TrainingAnalysis()
 
     @staticmethod
     def _read(path, limit=8 * 1024 * 1024):
@@ -61,7 +64,7 @@ class SimpleTrainer:
         try:
             state, run, _ = self._run()
         except (ValueError, OSError) as exc:
-            return {"state": "unavailable", "progress": 0, "message": str(exc), "can_start": False, "can_pause": False}
+            return {"state": "unavailable", "progress": 0, "message": str(exc), "can_start": False, "can_pause": False, "auto_continue": False}
         related = self._related(run["run_id"])
         busy = self._busy()
         active = next((j for j in related if j["status"] in ACTIVE), None)
@@ -84,9 +87,19 @@ class SimpleTrainer:
         elif status in {"succeeded", "complete"}:
             status, progress = "complete", 1.
             message = "本轮已完成，点击训练继续下一轮"
+        if not active and state.get("auto_error"):
+            message = "自动继续已停止：" + state["auto_error"]
         return {"state": status, "progress": min(1., max(0., progress)), "message": message or "可从断点继续",
+                "auto_continue": bool(state.get("auto_continue")),
                 "can_start": not busy, "can_pause": bool(active and active["status"] in {"queued", "running"}
                                                            and not active.get("pause_requested"))}
+
+    def analysis(self):
+        _, record, path = self._run()
+        metrics = self.settings.path(record.get("metrics_path", str(path.parent / "metrics.jsonl")))
+        if not metrics.is_relative_to(path.parent):
+            raise ValueError("训练日志不属于当前运行")
+        return self.curves.read(metrics, record["run_id"])
 
     def _prepare(self):
         state, record, run_path = self._run()
@@ -139,16 +152,23 @@ class SimpleTrainer:
                     "original_run_directory": self.settings.relative(run_path.parent), "reason": "simple-trainer-button"})
         return request, self.settings.relative(backup)
 
-    async def start(self):
+    async def start(self, automatic=False):
         async with self.lock:
+            state = self._read(self.state_path, 16384)
+            if automatic:
+                if not state.get("auto_continue") or not state.get("auto_armed") or not state.get("job_id"):
+                    return self.status()
+                if self.store.get("jobs", state["job_id"])["status"] != "succeeded":
+                    return self.status()
             if self._busy():
                 return self.status()  # Repeated clicks cannot queue extra rounds.
             request, backup = await asyncio.to_thread(self._prepare)
             if self._busy():
                 return self.status()
             previous = self._read(self.state_path, 16384)
-            pending = {"run_id": request["resume_run_id"], "target_epochs": request["epochs"],
+            pending = {**previous, "run_id": request["resume_run_id"], "target_epochs": request["epochs"],
                        "progress_epoch_start": request["progress_epoch_start"], "backup_path": backup, "updated_at": now()}
+            pending.update(auto_armed=bool(previous.get("auto_continue")), auto_error=None)
             atomic_json(self.state_path, pending)
             try:
                 submitted = self.jobs.submit("training", request)
@@ -156,14 +176,54 @@ class SimpleTrainer:
                 atomic_json(self.state_path, previous)
                 raise
             atomic_json(self.state_path, {**pending, **submitted})
-            self.store.event("training.simple_start", submitted["job_id"], target_epochs=request["epochs"], backup_path=backup)
+            self.store.event("training.simple_start", submitted["job_id"], target_epochs=request["epochs"], backup_path=backup, automatic=automatic)
             return self.status()
 
     async def pause(self):
         async with self.lock:
-            _, record, _ = self._run()
+            state, record, _ = self._run()
+            atomic_json(self.state_path, {**state, "auto_continue": False, "auto_armed": False, "auto_error": None})
             for job in self._related(record["run_id"]):
                 if job["status"] in {"queued", "running"}:
                     self.jobs.pause_training(job["id"])
                     self.store.event("training.pause_requested", job["id"])
             return self.status()
+
+    async def set_auto(self, enabled):
+        if type(enabled) is not bool:
+            raise ValueError("自动继续须为开启或关闭")
+        async with self.lock:
+            state, record, _ = self._run()
+            related = self._related(record["run_id"])
+            active = next((j for j in related if j["status"] in {"queued", "running"} and not j.get("pause_requested")), None)
+            atomic_json(self.state_path, {**state, "run_id": record["run_id"], "auto_continue": enabled,
+                "auto_armed": bool(enabled and active), "auto_error": None, "updated_at": now(),
+                **({"job_id": active["id"]} if active else {})})
+            self.store.event("training.auto_continue", record["run_id"], enabled=enabled)
+            return self.status()
+
+    async def _stop_auto(self, reason):
+        async with self.lock:
+            state = self._read(self.state_path, 16384)
+            if state.get("auto_continue"):
+                atomic_json(self.state_path, {**state, "auto_continue": False, "auto_armed": False, "auto_error": reason[:1000]})
+                self.store.event("training.auto_stopped", state.get("run_id"), reason=reason[:1000])
+
+    async def watch(self):
+        while True:
+            await asyncio.sleep(2)
+            try:
+                state = self._read(self.state_path, 16384)
+                if not (state.get("auto_continue") and state.get("auto_armed") and state.get("job_id")):
+                    continue
+                job = self.store.get("jobs", state["job_id"])
+                if job["status"] in {"failed", "paused", "cancelled", "interrupted"}:
+                    await self._stop_auto("训练已暂停、中断或失败，请检查后手动继续")
+                elif job["status"] == "succeeded" and not self._busy():
+                    _, record, _ = self._run()
+                    if any(s.get("early_stopped") for s in record["stages"].values()):
+                        await self._stop_auto("验证指标已触发早停")
+                    else:
+                        await self.start(automatic=True)
+            except (ValueError, KeyError, OSError) as exc:
+                await self._stop_auto(str(exc))

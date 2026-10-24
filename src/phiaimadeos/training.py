@@ -464,6 +464,8 @@ def run_training(request: dict, project_root, progress=None, pause_requested=Non
                 scheduler._last_lr = [group["lr"] for group in optimizer.param_groups]
                 _restore_rng(state["rng"], torch, np)
                 stage_info = {**previous, "training_state": "running"}
+                if extend_completed:
+                    stage_info.pop("early_stopped", None)
                 del state
             record["stages"][name] = stage_info
             _atomic_json(run_path, record)

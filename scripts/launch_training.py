@@ -93,7 +93,7 @@ def main():
     browser = browser_path()
     page = URL + "/trainer.html"
     if browser:
-        subprocess.Popen([str(browser), "--app=" + page, "--window-size=640,360", "--no-first-run"], cwd=ROOT,
+        subprocess.Popen([str(browser), "--app=" + page, "--window-size=1100,660", "--no-first-run"], cwd=ROOT,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     else:
         webbrowser.open(page, new=1)

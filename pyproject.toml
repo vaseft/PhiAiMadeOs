@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=77,<82"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "phiaimadeos"
+version = "0.1.0a1"
+description = "Local Phira chart generation, independent auditing and human review workbench"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = "GPL-3.0-only"
+dependencies = [
+  "fastapi>=0.110,<1", "uvicorn>=0.30,<1", "websockets>=15,<17", "python-multipart>=0.0.20,<1",
+  "numpy>=1.26,<3", "scipy>=1.13,<2", "soundfile>=0.12,<1",
+  "jsonschema>=4.22,<5", "PyYAML>=6,<7", "psutil>=6,<9",
+]
+
+[project.optional-dependencies]
+mcp = ["mcp>=2,<3"]
+
+[project.scripts]
+pamos = "phiaimadeos.__main__:main"
+
+[tool.setuptools]
+packages = ["phiaimadeos", "phiaimadeos.api", "pamos_mcp"]
+
+[tool.setuptools.package-dir]
+phiaimadeos = "src/phiaimadeos"
+pamos_mcp = "pamos_mcp"

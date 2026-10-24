@@ -20,7 +20,7 @@ BLOCKED_DIRS = (
     ".tools/", ".runtime/", ".cache/", ".downloads/", ".local/",
 )
 BLOCKED_EXTENSIONS = {
-    ".mp3", ".flac", ".ogg", ".wav", ".pez", ".pt", ".pth", ".ckpt",
+    ".mp3", ".flac", ".ogg", ".wav", ".m4a", ".aac", ".opus", ".pez", ".rpenmod", ".pt", ".pth", ".ckpt",
     ".safetensors", ".onnx", ".sqlite", ".sqlite3", ".db", ".pem", ".key",
 }
 MAX_TRACKED_BYTES = 5 * 1024 * 1024  # Regular source files only; large binaries require review.

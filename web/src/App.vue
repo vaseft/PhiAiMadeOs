@@ -39,7 +39,7 @@ function openCandidate(id: string) { selected.value = id; page.value = 'review' 
       <main>
         <div v-if="!state.connected" class="connection-banner"><strong>尚未连接本地服务</strong><span>请先启动 PhiAiMadeOs 本地工作台。已填写的内容会保留在当前页面，连接后可继续。</span></div>
         <GeneratePage v-if="page === 'generate'" @open-candidate="openCandidate" @library="page = 'library'" @jobs="page = 'jobs'" />
-        <LibraryPage v-if="page === 'library'" />
+        <LibraryPage v-if="page === 'library'" @open-candidate="openCandidate" />
         <KeepAlive><ReviewPage v-if="page === 'review'" v-model:selected="selected" /></KeepAlive>
         <TrainingPage v-if="page === 'training'" />
         <SettingsPage v-if="page === 'settings'" />

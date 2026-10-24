@@ -235,10 +235,15 @@ def create_app():
         permission = rights(value["license_status"], value["allowed_actions"])
         if value.get("music_asset_id"):
             store.get("assets", value["music_asset_id"])
-        chart_to_ir(read_chart(settings.path(value["path"])), value["chart_mode"], value.get("key_count"))
+        if previous.get("import_status") == "archived_only":
+            if value["chart_mode"] != previous["chart_mode"] or value.get("key_count") != previous.get("key_count"):
+                raise ValueError("仅存档的未支持格式不能更改解析模式；原件与来源标签保留")
+        else:
+            chart_to_ir(read_chart(settings.path(value["path"])), value["chart_mode"], value.get("key_count"))
         ranges = {"EZ": (0, 10), "HD": (11, 14), "IN": (14, 17), "AT": (15, 18)}
         bounds = ranges.get(value["difficulty_class"])
-        if not bounds or type(value["difficulty_value"]) is not int or not bounds[0] <= value["difficulty_value"] <= bounds[1]:
+        unlabelled = value["difficulty_class"] is None and value["difficulty_value"] is None
+        if not unlabelled and (not bounds or type(value["difficulty_value"]) is not int or not bounds[0] <= value["difficulty_value"] <= bounds[1]):
             raise ValueError("难度标签不符合 EZ/HD/IN/AT 范围")
         for field in ("performance_intensity", "wildness"):
             v = value.get(field)

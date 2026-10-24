@@ -80,8 +80,8 @@ def build_manifest(samples, output_dir, seed=42):
                 raise ValueError("缺少明确训练授权；需要 explicit_permitted 且 allowed_actions 包含 training")
             if not isinstance(item.get("allowed_actions"), list) or not all(isinstance(action, str) for action in item["allowed_actions"]):
                 raise ValueError("allowed_actions 必须是显式字符串数组")
-            if item.get("source_type", "").lower() in {"official", "official_chart"}:
-                raise ValueError("当前工作台不读取或训练官方谱面；请使用用户授权的自有谱面")
+            # A source label is provenance, not a grant of rights. Explicit
+            # per-record training permission is required above for every source.
             if item.get("human_verified_alignment") is not True:
                 raise ValueError("训练样本必须由人工明确确认音乐绑定与 offset 对齐")
             for key in ("chart_id", "music_asset_id", "chart_path", "feature_path", "conditions"):

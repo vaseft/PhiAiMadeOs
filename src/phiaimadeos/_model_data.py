@@ -92,8 +92,7 @@ def read_manifest(path: Path, root: Path):
                 or not all(isinstance(action, str) for action in actions) or "training" not in actions):
             raise ModelError("TRAINING_PERMISSION_REQUIRED", "样本没有明确训练许可；已拒绝整个训练请求。",
                              chart_id=sample.get("chart_id"))
-        if "official" in str(sample.get("source_type", "")).lower():
-            raise ModelError("OFFICIAL_SOURCE_EXCLUDED", "本轮禁止读取用户官方谱面文件。")
+        # Source provenance never substitutes for the explicit permission gate.
         assert_no_noise(sample.get("conditions", {}))
         safe_path(root, sample.get("chart_path"))
         safe_path(root, sample.get("feature_path"))

@@ -34,7 +34,7 @@ export async function refresh(all = false) {
     if (all) await openSession(true)
     const status = await api('/status')
     state.status = status; state.connected = true
-    const resources = all ? ['assets', 'charts', 'candidates', 'jobs', 'models', 'datasets', 'training/runs', 'capabilities'] : ['candidates', 'jobs', 'models', 'training/runs', ...(status.counts?.datasets !== state.datasets.length ? ['datasets'] : [])]
+    const resources = all ? ['assets', 'charts', 'candidates', 'jobs', 'models', 'datasets', 'training/runs', 'capabilities'] : ['candidates', 'jobs', 'models', 'training/runs', ...(status.counts?.datasets !== state.datasets.length ? ['datasets'] : []), ...(status.counts?.assets !== state.assets.length ? ['assets'] : []), ...(status.counts?.charts !== state.charts.length ? ['charts'] : [])]
     const results = await Promise.allSettled(resources.map(path => api('/' + path)))
     results.forEach((r, i) => {
       if (r.status === 'fulfilled') {
@@ -50,6 +50,7 @@ export function activeJob(job: Job) { return ['queued', 'pending', 'running', 'g
 export function label(value: unknown) {
   const labels: Record<string, string> = { regular: '常规多线', pure_keys: '固定键位', anomaly: '特殊异像', explicit_permitted: '明确许可', restricted: '有限许可', unknown: '许可待确认', local_research: '本地研究', training: '模型训练', distribution: '对外分发', queued: '等待执行', pending: '等待执行', running: '正在执行', completed: '已完成', succeeded: '已完成', success: '已完成', failed: '失败', cancelled: '已取消', cancelling: '正在取消', cancel_requested: '正在取消', generated: '已生成', auditing: '审计中', ready_for_review: '待人工审核', audit_blocked: '审计阻断', approved: '审核通过', revision_requested: '退回修改', rejected: '已拒绝', exported: '已导出', experimental: '实验权重', candidate: '候选权重', stable: '稳定权重', baseline_only: '规则基线', note_rhythm: '音符与节奏', line_motion: '判定线运动', placement: '空间与键位', all: '依次训练全部阶段', cpu: 'CPU', cuda: 'GPU / CUDA' }
   Object.assign(labels, { draft: '草稿', awaiting_review: '待人工审核', blocked: '审计阻断', not_run: '尚未运行', interrupted: '已中断', partial: '部分完成', analysis: '音频分析', generation: '谱面生成', learned_generation: '模型生成', audit: '独立审计', dataset: '构建数据集', postprocess: '局部建议', training: '模型训练' })
+  labels.library_import = '导入本地素材库'
   const text = String(value ?? '—'); return labels[text.toLowerCase()] || text
 }
 export function time(value?: number) { if (!Number.isFinite(value)) return '—'; const n = Math.max(0, value!); return `${Math.floor(n / 60).toString().padStart(2, '0')}:${(n % 60).toFixed(3).padStart(6, '0')}` }

@@ -74,8 +74,6 @@ def perform(kind, request, progress, store, secret):
         samples = []
         charts = [store.get("charts", cid) for cid in request["chart_ids"]]
         for index, chart in enumerate(charts):
-            if str(chart.get("source_type", "")).lower() in {"official", "official_chart"}:
-                raise ValueError("当前版本不训练官方谱面来源")
             asset = store.get("assets", chart["music_asset_id"])
             for record in (chart, asset):
                 if record.get("license_status") != "explicit_permitted" or "training" not in record.get("allowed_actions", []):
@@ -84,6 +82,10 @@ def perform(kind, request, progress, store, secret):
                 raise ValueError("训练前需人工确认音乐绑定和 offset 对齐")
             if not str(chart.get("group_id", "")).strip():
                 raise ValueError("训练前请填写歌曲簇 group_id；同曲转码、裁切和不同难度必须同组")
+            ranges = {"EZ": (0, 10), "HD": (11, 14), "IN": (14, 17), "AT": (15, 18)}
+            bounds = ranges.get(chart.get("difficulty_class"))
+            if not bounds or type(chart.get("difficulty_value")) is not int or not bounds[0] <= chart["difficulty_value"] <= bounds[1]:
+                raise ValueError("训练难度标签未确认；原始小数/特殊难度不会自动映射或舍入")
             analysis = analysis_for(asset, progress, store)
             parsed = read_chart(settings.path(chart["path"]))
             ir = chart_to_ir(parsed, chart["chart_mode"], chart.get("key_count"))

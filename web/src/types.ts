@@ -1,6 +1,6 @@
 export type RecordData = Record<string, any>
 export interface Asset extends RecordData { id: string; name: string; duration_s?: number; license_status: string; allowed_actions: string[] }
-export interface Chart extends RecordData { id: string; name: string; music_asset_id?: string; chart_mode: string; key_count?: number; difficulty_class?: string; difficulty_value?: number; license_status: string; allowed_actions: string[] }
+export interface Chart extends RecordData { id: string; name: string; music_asset_id?: string | null; chart_mode: string; key_count?: number; difficulty_class?: string | null; difficulty_value?: number | null; source_type?: string; source_format?: string; source_level?: string; source_difficulty_value?: number | null; import_status?: 'ready' | 'archived_only'; candidate_id?: string | null; license_status: string; allowed_actions: string[] }
 export interface Candidate extends RecordData { id: string; music_asset_id: string; chart_mode: string; key_count?: number; chart_sha256: string; conditions: RecordData; status: string; parent_id?: string; manifest?: RecordData }
 export interface Job extends RecordData { id: string; kind?: string; state?: string; status?: string; progress?: number; message?: string }
 export interface Note extends RecordData { id: string; line_id: string; kind: string; time_s: number; end_time_s?: number; x: number; above?: number; fake?: boolean; lane_index?: number }

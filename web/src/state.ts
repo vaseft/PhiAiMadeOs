@@ -34,7 +34,7 @@ export async function refresh(all = false) {
     if (all) await openSession(true)
     const status = await api('/status')
     state.status = status; state.connected = true
-    const resources = all ? ['assets', 'charts', 'candidates', 'jobs', 'models', 'datasets', 'training/runs', 'capabilities'] : ['candidates', 'jobs', 'models', 'training/runs', ...(status.counts?.datasets !== state.datasets.length ? ['datasets'] : []), ...(status.counts?.assets !== state.assets.length ? ['assets'] : []), ...(status.counts?.charts !== state.charts.length ? ['charts'] : [])]
+    const resources = all ? ['assets', 'charts', 'candidates', 'jobs', 'models', 'datasets', 'training/runs', 'capabilities'] : ['candidates', 'jobs', 'models', 'training/runs', ...(status.counts?.datasets !== state.datasets.length ? ['datasets'] : []), ...(status.counts?.assets !== state.assets.length ? ['assets'] : []), ...(status.counts?.charts !== state.charts.length || state.jobs.some(job => job.kind === 'library_reprocess' && activeJob(job)) ? ['charts'] : [])]
     const results = await Promise.allSettled(resources.map(path => api('/' + path)))
     results.forEach((r, i) => {
       if (r.status === 'fulfilled') {

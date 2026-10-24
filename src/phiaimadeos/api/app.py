@@ -21,6 +21,7 @@ from ..services import rights, load_candidate, create_candidate, cached_analysis
 from ..formats import read_chart, chart_to_ir, chart_hash, export_package
 from .. import patches
 from ..preview import TimelineCache
+from ..simple_trainer import SimpleTrainer
 
 BASELINE = {"id": "baseline-v1", "name": "规则基线（未训练）", "status": "baseline_only", "available": True, "supported_modes": ["regular", "pure_keys"], "key_counts": [4, 5, 6], "verification": "NOT RUN", "stages": {}}
 ORIGINS = {"http://127.0.0.1:8765", "http://localhost:8765", "http://127.0.0.1:5173", "http://localhost:5173"}
@@ -30,6 +31,7 @@ def create_app():
     settings = get_settings()
     store = Store(settings)
     jobs = Jobs(store)
+    simple_trainer = SimpleTrainer(store, jobs)
     bridge = Bridge(store)
     llm = LLMSettings()
     timeline_cache = TimelineCache(store)
@@ -484,6 +486,18 @@ def create_app():
     def training_runtime():
         from ..training_runtime import recommended_runtime
         return recommended_runtime(settings.root)
+
+    @app.get("/api/v1/trainer")
+    def trainer_status():
+        return simple_trainer.status()
+
+    @app.post("/api/v1/trainer/start")
+    async def trainer_start():
+        return await simple_trainer.start()
+
+    @app.post("/api/v1/trainer/pause")
+    async def trainer_pause():
+        return await simple_trainer.pause()
 
     @app.post("/api/v1/models/{model_id}/promote")
     def promote(model_id: str, payload: dict):

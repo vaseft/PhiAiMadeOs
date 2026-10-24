@@ -8,6 +8,7 @@ import traceback
 from .settings import get_settings, atomic_json, new_id, now, file_hash
 from .store import Store
 from .services import analysis_for, create_candidate, run_audit, load_candidate
+from .training import TrainingPaused
 
 
 @contextmanager
@@ -101,7 +102,8 @@ def perform(kind, request, progress, store, secret):
             raise ValueError("训练集 manifest 内容发生变化")
         effective = {**request, "manifest_path": dataset["manifest_path"]}
         with gpu_lock(settings):
-            result = run_training(effective, settings.root, progress)
+            result = run_training(effective, settings.root, progress,
+                pause_requested=lambda: bool(store.get("jobs", request["job_id"]).get("pause_requested")) if request.get("job_id") else False)
         run = store.put("training_runs", {**result, "id": new_id()}, immutable=True)
         if result.get("bundle", {}).get("stages"):
             bundle = result["bundle"]
@@ -133,6 +135,9 @@ def main():
         result = perform(job["kind"], request, progress, store, secret)
         if store.get("jobs", job_id)["status"] == "running":
             store.update("jobs", job_id, {"status": "succeeded", "result": result, "progress": 1, "finished_at": now(), "message": "处理完成，验收状态见产物记录"})
+    except TrainingPaused as exc:
+        if store.get("jobs", job_id)["status"] not in {"cancelled", "cancelling"}:
+            store.update("jobs", job_id, {"status": "paused", "finished_at": now(), "message": str(exc), "error": None})
     except Exception as exc:
         traceback.print_exc()
         if store.get("jobs", job_id)["status"] not in {"cancelled", "cancelling"}:

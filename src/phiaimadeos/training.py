@@ -28,6 +28,10 @@ from ._training_batch import (EXECUTION_VERSION, batch_executor, loss_rows, prep
 STAGES = ("note_rhythm", "line_motion", "placement")
 
 
+class TrainingPaused(Exception):
+    """Cooperative stop after an atomic resumable checkpoint, not a failure."""
+
+
 def _now():
     return datetime.now(timezone.utc).isoformat()
 
@@ -261,13 +265,17 @@ def _training_dir(root):
     return destination
 
 
-def run_training(request: dict, project_root, progress=None) -> dict:
+def run_training(request: dict, project_root, progress=None, pause_requested=None) -> dict:
     """Run real training or raise a structured ModelError; never manufacture success.
 
     Resume is limited to files produced in this controlled local run directory.
     Both weights and full state load with ``weights_only=True``.
     """
     root = Path(project_root).resolve()
+    def check_pause():
+        if pause_requested and pause_requested():
+            raise TrainingPaused("已暂停；再次训练将从保存的断点继续。")
+    check_pause()
     from .formats import PARSER_VERSION
     stage = request.get("stage", "all")
     if stage not in (*STAGES, "all"):
@@ -287,6 +295,7 @@ def run_training(request: dict, project_root, progress=None) -> dict:
     cache = SongCache(root, samples, max_lines=max_lines)
     _emit(progress, phase="indexing", progress=0.01, message="核对完整标签与窗口容量。")
     windows, window_report = build_windows(cache)
+    check_pause()
     if stage in ("all", "note_rhythm", "placement"):
         for split in ("train", "val"):
             if sum(item["notes"] for item in window_report if item["split"] == split) == 0:
@@ -391,8 +400,10 @@ def run_training(request: dict, project_root, progress=None) -> dict:
     _atomic_json(run_path, record)
     _emit(progress, run_id=run_id, phase="training_ready", progress=0.03,
           message="真实训练运行已登记；断点与日志保存到本机受管理目录。")
+    progress_start = min(epochs - 1, max(0, int(request.get("progress_epoch_start", 0))))
     try:
         for stage_index, name in enumerate(stages):
+            check_pause()
             previous = record["stages"].get(name, {})
             if previous.get("training_state") == "complete" and (
                     previous.get("epochs_completed", 0) >= epochs or (previous.get("early_stopped") and not extend_completed)):
@@ -479,6 +490,12 @@ def run_training(request: dict, project_root, progress=None) -> dict:
             if not previous.get("resume_checkpoint_path"):
                 save_resume(0, 0, None)
 
+            def pause_at_checkpoint(epoch, position, sample_order):
+                if pause_requested and pause_requested():
+                    save_resume(epoch, position, sample_order)
+                    stage_info["training_state"] = "paused"
+                    raise TrainingPaused("已保存断点并暂停；再次训练将继续当前一轮。")
+
             def prepare_chunk(indices):
                 song = cache.get(windows[indices[0]].sample_index)
                 if motion_dictionary is not None:
@@ -501,6 +518,7 @@ def run_training(request: dict, project_root, progress=None) -> dict:
                 model.train()
                 epoch_loss, epoch_windows = 0.0, 0
                 while cursor < len(order):
+                    pause_at_checkpoint(epoch, cursor, order)
                     optimizer.zero_grad(set_to_none=True)
                     group_size = min(effective_batch, len(order) - cursor)
                     group_loss_tensor, components = torch.zeros((), device=device), {}
@@ -546,13 +564,15 @@ def run_training(request: dict, project_root, progress=None) -> dict:
                     if optimizer_step % config["checkpoint_optimizer_steps"] == 0:
                         save_resume(epoch, cursor, order)
                     _emit(progress, phase="training", stage=name,
-                          progress=0.03 + 0.94 * (stage_index + (epoch + cursor / len(order)) / epochs) / len(stages),
+                          progress=0.03 + 0.94 * (stage_index + max(0., (epoch + cursor / len(order) - progress_start) / (epochs - progress_start))) / len(stages),
                           message=f"{name} 第 {epoch + 1} 轮，真实优化器步 {optimizer_step}。", loss=group_loss / group_size)
+                pause_at_checkpoint(epoch, cursor, order)
                 model.eval()
                 val_groups = defaultdict(list)
                 val_parts = defaultdict(list)
                 with torch.inference_mode(), batch_executor(bool(prefetch_batches)) as executor:
                     for indices, prepared in prepared_chunks(window_chunks(val_indices, windows, microbatch), prepare_chunk, executor):
+                        pause_at_checkpoint(epoch, cursor, order)
                         batch = transfer_batch(prepared, device)
                         with torch.autocast(device_type=device.type, dtype=amp_dtype, enabled=amp_enabled):
                             prediction = model(**batch["common"])
@@ -588,6 +608,7 @@ def run_training(request: dict, project_root, progress=None) -> dict:
                 stage_info.update(last_metrics=metrics, epochs_completed=epoch + 1)
                 order, cursor = None, 0
                 save_resume(epoch + 1, 0, None)
+                pause_at_checkpoint(epoch + 1, 0, None)
                 if stale >= 8:
                     stage_info["early_stopped"] = True
                     break
@@ -624,6 +645,11 @@ def run_training(request: dict, project_root, progress=None) -> dict:
         _atomic_json(run_path, record)
         _emit(progress, phase="complete", progress=1.0, message="真实训练运行已结束；模型保持 experimental，等待独立验收。")
         return record
+    except TrainingPaused:
+        record.update(training_state="paused", paused_at=_now(), final_resources=_resources(torch, device))
+        _atomic_json(run_path, record)
+        _append_log(log_path, {"phase": "paused", "resources": record["final_resources"]})
+        raise
     except Exception as exc:
         error = exc.as_dict() if isinstance(exc, ModelError) else {"code": "TRAINING_FAILED", "message": str(exc), "type": type(exc).__name__}
         if isinstance(exc, torch.OutOfMemoryError):

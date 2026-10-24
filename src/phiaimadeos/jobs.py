@@ -89,6 +89,18 @@ class Jobs:
                 await process.wait()
         return self.store.update("jobs", job_id, {"status": "cancelled", "finished_at": now(), "message": "已取消，已有 checkpoint 保留"})
 
+    def pause_training(self, job_id):
+        current = self.store.get("jobs", job_id)
+        if current["kind"] != "training":
+            raise ValueError("只有模型训练支持保存断点后暂停")
+        if current["status"] == "queued":
+            return self.store.update("jobs", job_id, {"status": "paused", "pause_requested": True,
+                "finished_at": now(), "message": "已暂停等待中的训练，未启动GPU计算"}, expected={"status": "queued"})
+        if current["status"] == "running":
+            return self.store.update("jobs", job_id, {"pause_requested": True,
+                "message": "正在暂停：完成当前计算批次并保存断点后释放GPU"}, expected={"status": "running"})
+        return current
+
     async def close(self):
         self.closing = True
         for identifier in list(self.active):

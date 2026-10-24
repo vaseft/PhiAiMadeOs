@@ -19,7 +19,7 @@ let pollCount = 0
 const pending = ref(false)
 const error = ref('')
 const percent = computed(() => Math.round(current.value.progress * 100))
-const batches = [1, 2, 4, 8, 16, 32, 64, 128]
+const batches = [1, 2, 4, 8, 16, 32, 64, 128, 256]
 const draft = ref<Runtime>({ microbatch: 8, grad_accum: 2, prepare_workers: 0, prefetch_batches: 1, vram_budget_gib: 6.2 })
 const legacyRuntime = ref<Runtime>({ ...draft.value })
 const runtime = computed<RuntimeState>(() => current.value.runtime ?? { saved: legacyRuntime.value, active: null, applying: false, message: '旧服务尚未加载强度接口；重启工作台后可以应用设置。' })
@@ -31,7 +31,8 @@ const presets = [
   { name: '稳健', microbatch: 8, grad_accum: 2, prepare_workers: 2, vram_budget_gib: 6.2 },
   { name: '增强', microbatch: 32, grad_accum: 1, prepare_workers: 4, vram_budget_gib: 6.6 },
   { name: '高负载', microbatch: 64, grad_accum: 1, prepare_workers: 6, vram_budget_gib: 7 },
-  { name: '极限', microbatch: 128, grad_accum: 1, prepare_workers: 8, vram_budget_gib: 7.2 },
+  { name: '强力', microbatch: 128, grad_accum: 1, prepare_workers: 8, vram_budget_gib: 7.2 },
+  { name: '极限', microbatch: 256, grad_accum: 1, prepare_workers: 8, vram_budget_gib: 7.2 },
 ]
 function choosePreset(preset: typeof presets[number]) { draft.value = { ...preset, prefetch_batches: 1 } }
 function setCurrent(value: TrainingState) {
@@ -144,7 +145,7 @@ onUnmounted(() => { stopped = true; clearTimeout(timer) })
       <fieldset :disabled="pending || runtime.applying || !current.runtime">
         <div class="presets"><button v-for="preset in presets" :key="preset.name" type="button" :class="{ selected: draft.microbatch === preset.microbatch && draft.grad_accum === preset.grad_accum && draft.prepare_workers === preset.prepare_workers && draft.vram_budget_gib === preset.vram_budget_gib }" @click="choosePreset(preset)">{{ preset.name }}<small>{{ preset.microbatch }} 并行窗口</small></button></div>
         <div class="runtime-fields">
-          <label class="batch-field"><span>GPU 并行窗口 <strong>{{ draft.microbatch }}</strong></span><input v-model.number="batchIndex" type="range" min="0" max="7" step="1" aria-label="GPU并行窗口"><small>1 → 128，越大通常越占显存</small></label>
+          <label class="batch-field"><span>GPU 并行窗口 <strong>{{ draft.microbatch }}</strong></span><input v-model.number="batchIndex" type="range" min="0" :max="batches.length - 1" step="1" aria-label="GPU并行窗口"><small>1 → 256，越大通常越占显存</small></label>
           <label><span>CPU 准备路数</span><select v-model.number="draft.prepare_workers" aria-label="CPU准备路数"><option :value="0">自动</option><option v-for="count in 8" :key="count" :value="count">{{ count }} 路</option></select><small>可用内存不足时会降低实际路数</small></label>
           <label><span>梯度累积</span><input v-model.number="draft.grad_accum" type="number" min="1" :max="Math.min(128, Math.floor(2048 / draft.microbatch))" step="1" aria-label="梯度累积"><small>每次更新 {{ draft.microbatch * draft.grad_accum }} 个窗口</small></label>
           <label><span>训练显存预算 <strong>{{ draft.vram_budget_gib.toFixed(1) }} GiB</strong></span><input v-model.number="draft.vram_budget_gib" type="range" min="2" max="7.2" step="0.1" aria-label="训练显存预算"><small>用于停止超限，不会预占或填满显存</small></label>
@@ -197,7 +198,7 @@ p.compatibility-note { text-align: left; color: #95703e; font-size: 12px; }
 .gpu-stats { display: flex; flex-wrap: wrap; gap: 12px 24px; margin: 16px 0; font-size: 12px; color: #71829c; }
 .gpu-stats strong { color: #344259; font-weight: 600; margin-left: 5px; }
 fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
-.presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.presets { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
 .presets button { background: white; border: 1px solid #d7e1f0; color: #4a5e7b; min-height: 58px; font-size: 13px; font-weight: 500; }
 .presets button.selected { border-color: #628fe8; background: #eaf1ff; color: #295bc1; }
 .presets small { display: block; font-size: 10px; font-weight: 400; margin-top: 4px; color: #8190a6; }
@@ -213,7 +214,7 @@ fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 button.apply-runtime { flex: initial; min-height: 36px; padding: 8px 20px; font-size: 13px; border: 1px solid #326be5; background: #326be5; color: white; border-radius: 8px; }
 .runtime-detail { margin-top: 16px; padding-top: 12px; border-top: 1px solid #e4eaf5; color: #5e7392; font-size: 11px; line-height: 1.9; }
 p.runtime-note { margin-top: 8px; text-align: left; font-size: 10px; color: #8190a6; }
-@media (max-width: 760px) { .runtime-fields { grid-template-columns: 1fr 1fr; } .intensity { padding: 16px; } .presets { gap: 6px; } }
+@media (max-width: 760px) { .runtime-fields { grid-template-columns: 1fr 1fr; } .intensity { padding: 16px; } .presets { gap: 6px; grid-template-columns: repeat(3, 1fr); } }
 .analysis-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 h1 { margin: 0; font-size: 15px; font-weight: 600; }
 .legend { display: flex; gap: 14px; font-size: 11px; color: #6a788d; }

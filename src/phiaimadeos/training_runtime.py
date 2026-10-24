@@ -3,7 +3,7 @@ import json
 import math
 from pathlib import Path
 
-MICROBATCHES = (1, 2, 4, 8, 16, 32, 64, 128)
+MICROBATCHES = (1, 2, 4, 8, 16, 32, 64, 128, 256)
 RUNTIME_KEYS = ("microbatch", "grad_accum", "prefetch_batches", "prepare_workers", "vram_budget_gib")
 
 
@@ -14,7 +14,7 @@ def validate_runtime(value):
     workers = value.get("prepare_workers", 0)
     budget = value.get("vram_budget_gib", 6.2)
     if type(batch) is not int or batch not in MICROBATCHES:
-        raise ValueError("并行窗口数须为1/2/4/8/16/32/64/128")
+        raise ValueError("并行窗口数须为1/2/4/8/16/32/64/128/256")
     if type(accumulation) is not int or not 1 <= accumulation <= 128 or batch * accumulation > 2048:
         raise ValueError("梯度累积须为1..128，且每次更新不超过2048个窗口")
     if type(prefetch) is not int or prefetch not in (0, 1):

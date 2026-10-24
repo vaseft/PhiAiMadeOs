@@ -32,20 +32,16 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install contract dependencies only when Kit exists
-        shell: bash
-        run: |
-          if [ -f scripts/validate_v3_contracts.py ] || [ -f scripts/validate_v4_contracts.py ] || [ -f scripts/validate_v5_contracts.py ]; then
-            python -m pip install 'jsonschema>=4.22,<5' 'PyYAML>=6,<7'
-          else
-            echo "::notice::V5.1 Agent Kit is not yet imported; checking bootstrap only."
-          fi
-      - name: Execute available contract and unit tests
+      - name: Install contract and MCP dependencies
+        run: python -m pip install -r requirements/contracts.txt -r requirements/mcp_v51.txt
+      - name: Compile imported Python sources
+        run: python -m compileall -q scripts pamos_mcp tests
+      - name: Execute required contracts, offline regressions and stdio integration
         shell: bash
         run: |
           set -euo pipefail
-          if [ -f scripts/validate_v3_contracts.py ]; then python scripts/validate_v3_contracts.py; fi
-          if [ -f scripts/validate_v4_contracts.py ]; then python scripts/validate_v4_contracts.py; fi
-          if [ -f scripts/validate_v5_contracts.py ]; then python scripts/validate_v5_contracts.py; fi
-          if [ -d tests ]; then python -m unittest discover -s tests -v; fi
+          python scripts/validate_v3_contracts.py
+          python scripts/validate_v4_contracts.py
+          python scripts/validate_v5_contracts.py
+          python -m unittest discover -s tests -v
           echo "::notice::CI does not run GPU training, Phira-Pro gameplay, or RPE Next live bridge tests."

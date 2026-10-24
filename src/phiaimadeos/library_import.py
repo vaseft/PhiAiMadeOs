@@ -228,7 +228,6 @@ def import_one(path, archive_sha, source_root, run_id, store, asset_index, expec
                 asset = new_audio or (asset_index.get(audio_sha) if music_id else None)
                 if asset:
                     chart.setdefault("pamos", {})["duration_s"] = asset["duration_s"]
-                ir = chart_to_ir(chart, "regular", None)
                 warnings.extend(ir.get("warnings", []))
                 warnings.extend(chart.get("pamos", {}).get("compatibility_limits", []))
                 converted_path = destination / "chart.json"

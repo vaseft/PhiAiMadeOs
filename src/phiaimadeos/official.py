@@ -86,6 +86,7 @@ class _Conversion:
         self.resolutions = []
         self.max_time_error_s = 0.0
         self.target_events = 0
+        self._beat_cache = {}
 
     def warn(self, message):
         if message not in self._warning_set:
@@ -93,6 +94,9 @@ class _Conversion:
             self.warnings.append(message)
 
     def beat(self, seconds):
+        cached = self._beat_cache.get(seconds)
+        if cached is not None:
+            return list(cached)
         exact = seconds * self.reference / 60
         representable = exact.limit_denominator(MAX_DENOMINATOR)
         error = float(abs(exact - representable) * 60 / self.reference)
@@ -102,6 +106,7 @@ class _Conversion:
         result = beat_triplet(representable)
         if not -(2 ** 31) <= result[0] < 2 ** 31 or not 0 <= result[1] < 2 ** 32 or not 1 <= result[2] < 2 ** 32:
             raise ValueError("转换后的拍数超出Phira-Pro Triple(i32,u32,u32)范围")
+        self._beat_cache[seconds] = tuple(result)
         return result
 
     def event(self, start_s, end_s, start_value, end_value, provenance):

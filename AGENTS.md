@@ -2,6 +2,8 @@
 
 > **当前分支已导入用户现有 V5.1 Agent Kit 的开发规范、配置、Schema、提示词、测试及离线 MCP 最小原型。** 导入不表示完整产品、训练模型、审核 UI 或实时编辑器桥接已经实现，也不表示已经推送或合并。每次启动必须先核对仓库树、分支、远端与测试结果；不得凭文档虚构代码或模型。
 
+> 功能分支 `feature/local-workbench` 追加了 `src/phiaimadeos/`、`web/` 与 `extensions/rpe-next-bridge/` alpha 实现。以 [交付记录](docs/36_WORKBENCH_DELIVERY.md) 和真实 Git/PR 状态为准；本轮用户明确要求完成测试以外的工作，因此没有新增或主动运行测试，保留既有 CI，新功能仍需后续专门验收，不能自动合并或宣称已验证。下一轮若未继续豁免，应补本文件要求的自动测试与客户端验收。
+
 ## 0. 项目与仓库标识
 - 产品名：PhiAiMadeOs，简称 PAMOs；GitHub：`vaseft/PhiAiMadeOs`。
 - 远端：`https://github.com/vaseft/PhiAiMadeOs.git`；默认稳定分支：`main`。

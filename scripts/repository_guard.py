@@ -56,6 +56,8 @@ def validate() -> list[str]:
             continue
         if any(lower.startswith(prefix) for prefix in BLOCKED_DIRS):
             errors.append(f"Private data or generated directory tracked: {path}")
+        if any(name in {"node_modules", "dist", ".venv", ".tools", ".runtime", ".cache", ".local"} for name in parts):
+            errors.append(f"Nested generated or machine-local directory tracked: {path}")
         if "__pycache__" in parts or lower.endswith(".pyc"):
             errors.append(f"Compiled Python file tracked: {path}")
         if any(name == ".env" or name.startswith(".env.") and name != ".env.example" for name in parts):

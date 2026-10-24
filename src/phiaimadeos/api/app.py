@@ -20,6 +20,7 @@ from ..conditions import normalize
 from ..services import rights, load_candidate, create_candidate, cached_analysis, record_review, reviewed, family_history
 from ..formats import read_chart, chart_to_ir, chart_hash, export_package
 from .. import patches
+from ..preview import TimelineCache
 
 BASELINE = {"id": "baseline-v1", "name": "规则基线（未训练）", "status": "baseline_only", "available": True, "supported_modes": ["regular", "pure_keys"], "key_counts": [4, 5, 6], "verification": "NOT RUN", "stages": {}}
 ORIGINS = {"http://127.0.0.1:8765", "http://localhost:8765", "http://127.0.0.1:5173", "http://localhost:5173"}
@@ -31,6 +32,7 @@ def create_app():
     jobs = Jobs(store)
     bridge = Bridge(store)
     llm = LLMSettings()
+    timeline_cache = TimelineCache(store)
     session = secrets.token_urlsafe(36)
     mcp_token_path = settings.root / ".local/mcp-client-token"
     mcp_token = secrets.token_urlsafe(36)
@@ -309,16 +311,13 @@ def create_app():
 
     @app.get("/api/v1/candidates/{candidate_id}")
     def candidate(candidate_id: str):
-        return load_candidate(candidate_id, store)[0]
+        return store.get("candidates", candidate_id)
 
     @app.get("/api/v1/candidates/{candidate_id}/timeline")
     def timeline(candidate_id: str, start_s: float = 0, end_s: float = 30):
         if not math.isfinite(start_s) or not math.isfinite(end_s) or start_s < 0 or not start_s < end_s <= start_s + 300:
             raise ValueError("预览窗口须为有限 0..300 秒范围")
-        record, chart = load_candidate(candidate_id, store)
-        ir = chart_to_ir(chart, record["chart_mode"], record.get("key_count"))
-        selected = [n for n in ir["notes"] if n["end_time_s"] >= start_s and n["time_s"] <= end_s]
-        return {k: ir[k] for k in ("judge_lines", "bpm_map", "offset_ms", "duration_s", "chart_mode", "key_count", "info_offset_s", "warnings")} | {"notes": selected, "time_mapping": ir.get("time_mapping"), "start_s": start_s, "end_s": end_s}
+        return timeline_cache.window(candidate_id, start_s, end_s)
 
     @app.get("/api/v1/candidates/{candidate_id}/chart")
     def chart_download(candidate_id: str):

@@ -18,8 +18,11 @@ import struct
 import zipfile
 import zlib
 
-PARSER_VERSION = "common-rpe-1.0.0"
-MAX_JSON_BYTES = 32 * 1024 * 1024
+PARSER_VERSION = "common-rpe-1.1.0"
+# Large authored charts stay bounded, but are no longer rejected at the small
+# interactive-patch budget. Raw retention and read-only IR views avoid copies.
+MAX_JSON_BYTES = 256 * 1024 * 1024
+MAX_JSON_NODES = 24_000_000
 MAX_PACKAGE_BYTES = 256 * 1024 * 1024
 MAX_EXPANDED_BYTES = 512 * 1024 * 1024
 MAX_ENTRIES = 512
@@ -54,26 +57,33 @@ def _finite(value, name="number"):
 
 def _check_tree(value, depth=0, count=None):
     count = [0] if count is None else count
-    count[0] += 1
-    if depth > 64 or count[0] > 2_000_000:
-        raise ValueError("JSON 嵌套或节点数量超过安全限额")
-    if isinstance(value, dict):
-        for k, v in value.items():
-            if not isinstance(k, str):
+    # Iterator stack grows with nesting, not the millions of event scalars.
+    stack = [(iter((value,)), depth)]
+    while stack:
+        children, current_depth = stack[-1]
+        try:
+            item = next(children)
+        except StopIteration:
+            stack.pop()
+            continue
+        count[0] += 1
+        if current_depth > 64 or count[0] > MAX_JSON_NODES:
+            raise ValueError(f"JSON 嵌套超过64层或节点超过{MAX_JSON_NODES}有界处理限额")
+        if isinstance(item, dict):
+            if any(not isinstance(key, str) for key in item):
                 raise ValueError("JSON 对象键必须是字符串")
-            _check_tree(v, depth + 1, count)
-    elif isinstance(value, list):
-        for v in value:
-            _check_tree(v, depth + 1, count)
-    elif isinstance(value, float) and not math.isfinite(value):
-        raise ValueError("不允许 NaN 或 Infinity")
-    elif value is not None and not isinstance(value, (str, bool, int, float)):
-        raise ValueError("只允许 JSON 基本类型")
+            stack.append((iter(item.values()), current_depth + 1))
+        elif isinstance(item, list):
+            stack.append((iter(item), current_depth + 1))
+        elif isinstance(item, float) and not math.isfinite(item):
+            raise ValueError("不允许 NaN 或 Infinity")
+        elif item is not None and not isinstance(item, (str, bool, int, float)):
+            raise ValueError("只允许 JSON 基本类型")
 
 
 def _json(data):
     if len(data) > MAX_JSON_BYTES:
-        raise ValueError("谱面 JSON 超过 32 MiB 限额")
+        raise ValueError(f"谱面 JSON 超过 {MAX_JSON_BYTES // (1024 * 1024)} MiB 有界读取限额")
     def pairs(items):
         result = {}
         for key, value in items:
@@ -416,7 +426,7 @@ def lane_centers(key_count):
     return [675.0 * (-1 + 2 * (i + 0.5) / key_count) for i in range(key_count)]
 
 
-def chart_to_ir(chart, chart_mode="regular", key_count=None):
+def chart_to_ir(chart, chart_mode="regular", key_count=None, *, copy_raw=True):
     _check_tree(chart)
     if chart_mode not in {"regular", "pure_keys", "anomaly"}:
         raise ValueError("未知 chart_mode")
@@ -424,7 +434,12 @@ def chart_to_ir(chart, chart_mode="regular", key_count=None):
         lane_centers(key_count)
     elif key_count is not None:
         raise ValueError("常规/异像模式 key_count 必须为空")
-    raw = copy.deepcopy({k: v for k, v in chart.items() if k != "_pamos_import"})
+    # Read-only import/preview paths borrow the validated immutable chart.
+    # Editable callers retain an isolated copy. Within either IR the raw line
+    # and note references share that one snapshot instead of cloning it again.
+    raw = {k: v for k, v in chart.items() if k != "_pamos_import"}
+    if copy_raw:
+        raw = copy.deepcopy(raw)
     if not all(k in raw for k in ("BPMList", "META", "judgeLineList")):
         raise ValueError("仅支持共同 RPE JSON 结构")
     bpm_map = copy.deepcopy(raw["BPMList"])
@@ -462,7 +477,7 @@ def chart_to_ir(chart, chart_mode="regular", key_count=None):
         use_rpen = imported.get("info", {}).get("useRpen") is not False
         time_scale = factor if use_rpen else 1
         judge_lines.append({"id": f"line_{index}", "parent_id": None if parent == -1 else f"line_{parent}",
-                            "time_scale": time_scale, "raw": copy.deepcopy(line)})
+                            "time_scale": time_scale, "raw": line})
         if factor != 1:
             warnings.append(f"line_{index}: bpmfactor={factor}，按包 useRpen 标志生效 time_scale={time_scale}；客户端试听 NOT RUN")
         if line.get("attachUI") not in (None, "", False) or line.get("Texture", "line.png") != "line.png" or has_extended_features(line):
@@ -514,7 +529,7 @@ def chart_to_ir(chart, chart_mode="regular", key_count=None):
                           "time_s": tempo.to_seconds(beat) * time_scale + offset / 1000 + info_offset,
                           "end_time_s": tempo.to_seconds(end) * time_scale + offset / 1000 + info_offset,
                           "x": x, "above": note.get("above", 1), "fake": bool(note.get("isFake", 0)),
-                          "lane_index": lane_index, "lane_provenance": lane_provenance, "raw": copy.deepcopy(note)})
+                          "lane_index": lane_index, "lane_provenance": lane_provenance, "raw": note})
     noise = noise_snapshot(raw)
     if has_noise(raw):
         warnings.append("包含噪域：只读保留，禁止生成、训练或自动修改；噪域几何未认证")

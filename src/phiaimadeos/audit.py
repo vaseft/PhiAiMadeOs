@@ -11,7 +11,7 @@ from ._geometry import compile_track, scalar_value, line_transform, note_positio
 
 ENGINE_VERSION = "non-ai-rules-1.0.0"
 TRACKS = ("moveXEvents", "moveYEvents", "rotateEvents", "alphaEvents", "speedEvents")
-MAX_EVENTS = 150_000
+MAX_EVENTS = 2_000_000
 MAX_ISSUES = 1000
 
 
@@ -49,7 +49,7 @@ def audit_chart(chart, analysis=None, conditions=None):
     try:
         _check_tree(chart)
         digest = chart_hash(chart)
-        ir = chart_to_ir(chart, mode, key_count)
+        ir = chart_to_ir(chart, mode, key_count, copy_raw=False)
     except (ValueError, KeyError, TypeError, IndexError, OverflowError, AttributeError) as exc:
         issue("BLOCK", "FORMAT_INVALID", str(exc))
         return result()
@@ -129,7 +129,7 @@ def audit_chart(chart, analysis=None, conditions=None):
                     continue
                 event_count += len(events)
                 if event_count > MAX_EVENTS:
-                    issue("BLOCK", "EVENT_LIMIT", "事件数量超过150000安全上限")
+                    issue("BLOCK", "EVENT_LIMIT", f"事件数量超过{MAX_EVENTS}有界处理上限")
                     return result()
                 parsed, previous_start, previous_end, previous_value = [], None, None, None
                 for event in events:

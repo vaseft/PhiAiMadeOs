@@ -4,35 +4,36 @@ export function beatNumber(v: any): number {
   if (v && typeof v === 'object') return Number(v.whole || 0) + Number(v.numerator || 0) / (Number(v.denominator) || 1)
   return Number(v) || 0
 }
-function bpmSegments(map: RecordData[]) {
-  return (map || []).map(m => ({ beat: beatNumber(m.beat ?? m.start_beat ?? m.startTime ?? 0), bpm: Number(m.bpm || 120) })).filter(m => m.bpm > 0).sort((a, b) => a.beat - b.beat)
+type TempoIndex = { beats: Float64Array; bpms: Float64Array; seconds: Float64Array; zero: number }
+const tempoIndexes = new WeakMap<RecordData[], TempoIndex>()
+function beforeOrAt(values: ArrayLike<number>, target: number) {
+  let left = 0, right = values.length
+  while (left < right) { const middle = (left + right) >>> 1; if (values[middle]! <= target) left = middle + 1; else right = middle }
+  return Math.max(0, left - 1)
+}
+function tempoIndex(data: Timeline): TempoIndex {
+  const map = data.bpm_map || []
+  const cached = tempoIndexes.get(map)
+  if (cached) return cached
+  const rows = map.map(m => ({ beat: beatNumber(m.beat ?? m.start_beat ?? m.startTime ?? 0), bpm: Number(m.bpm || 120) })).filter(m => m.bpm > 0).sort((a, b) => a.beat - b.beat)
+  if (!rows.length) rows.push({ beat: 0, bpm: 120 })
+  const beats = Float64Array.from(rows, r => r.beat), bpms = Float64Array.from(rows, r => r.bpm), seconds = new Float64Array(rows.length)
+  for (let i = 1; i < rows.length; i++) seconds[i] = seconds[i - 1]! + (beats[i]! - beats[i - 1]!) * 60 / bpms[i - 1]!
+  const first = beforeOrAt(beats, 0), zero = seconds[first]! - beats[first]! * 60 / bpms[first]!
+  const result = { beats, bpms, seconds, zero }
+  tempoIndexes.set(map, result)
+  return result
 }
 function offset(data: Timeline) { return Number(data.offset_ms || 0) / 1000 + Number(data.info_offset_s || 0) }
 // Matches formats.py: package parser flags determine each line's effective time_scale.
 export function secondsToBeat(seconds: number, data: Timeline, factor = 1) {
-  const map = bpmSegments(data.bpm_map), elapsed = (seconds - offset(data)) / Math.max(.000001, factor)
-  if (!map.length) return elapsed * 2
-  let remain = elapsed
-  for (let i = 0; i < map.length; i++) {
-    const seg = map[i]!, next = map[i + 1]
-    const span = next ? (next.beat - seg.beat) * 60 / seg.bpm : Infinity
-    if (remain <= span) return seg.beat + remain * seg.bpm / 60
-    remain -= span
-  }
-  return 0
+  const map = tempoIndex(data), elapsed = (seconds - offset(data)) / Math.max(.000001, factor) + map.zero
+  const i = beforeOrAt(map.seconds, elapsed)
+  return map.beats[i]! + (elapsed - map.seconds[i]!) * map.bpms[i]! / 60
 }
 export function beatToSeconds(beat: number, data: Timeline, factor = 1) {
-  const map = bpmSegments(data.bpm_map)
-  if (!map.length) return beat / 2 * factor + offset(data)
-  let seconds = 0
-  if (beat < map[0]!.beat) return (beat - map[0]!.beat) * 60 / map[0]!.bpm * factor + offset(data)
-  for (let i = 0; i < map.length; i++) {
-    const seg = map[i]!, next = map[i + 1]
-    if (beat <= seg.beat) break
-    seconds += (Math.min(beat, next?.beat ?? beat) - seg.beat) * 60 / seg.bpm
-    if (!next || beat < next.beat) break
-  }
-  return seconds * factor + offset(data)
+  const map = tempoIndex(data), i = beforeOrAt(map.beats, beat)
+  return (map.seconds[i]! + (beat - map.beats[i]!) * 60 / map.bpms[i]! - map.zero) * factor + offset(data)
 }
 function bounceOut(x: number) {
   if (x < 1 / 2.75) return 7.5625 * x * x
@@ -73,17 +74,43 @@ function fraction(event: RecordData, x: number) {
   const start = ease(kind, left), end = ease(kind, right)
   return Math.abs(end - start) < 1e-12 ? x : (ease(kind, left + (right - left) * x) - start) / (end - start)
 }
-function eventValue(events: any[], beat: number, fallback: number) {
+type EventIndex = { starts: Float64Array; order: Uint32Array | null }
+const eventIndexes = new WeakMap<RecordData[], EventIndex>()
+function eventIndex(events: RecordData[]): EventIndex {
+  const cached = eventIndexes.get(events)
+  if (cached) return cached
+  const starts = Float64Array.from(events, e => beatNumber(e.startTime ?? e.start_beat))
+  let ordered = true
+  for (let i = 1; i < starts.length; i++) if (starts[i]! < starts[i - 1]!) { ordered = false; break }
+  // Preserve source order for equal starts: the last event at a boundary wins.
+  // The source array itself remains immutable, including non-monotonic timelines.
+  const order = ordered ? null : Uint32Array.from(events, (_, i) => i).sort((a, b) => starts[a]! - starts[b]! || a - b)
+  const result = { starts, order }
+  eventIndexes.set(events, result)
+  return result
+}
+function eventValue(events: RecordData[], beat: number, fallback: number) {
   if (!Array.isArray(events) || !events.length) return fallback
-  let selected = events[0], selectedStart = -Infinity
-  for (const event of events) { const start = beatNumber(event.startTime ?? event.start_beat); if (start <= beat && start >= selectedStart) { selected = event; selectedStart = start } }
+  const index = eventIndex(events)
+  let left = 0, right = events.length
+  while (left < right) { const middle = (left + right) >>> 1, original = index.order ? index.order[middle]! : middle; if (index.starts[original]! <= beat) left = middle + 1; else right = middle }
+  const selected = events[left ? (index.order ? index.order[left - 1]! : left - 1) : 0]!
   const a = beatNumber(selected.startTime ?? selected.start_beat), b = beatNumber(selected.endTime ?? selected.end_beat), start = Number(selected.start ?? 0), end = Number(selected.end ?? start)
   if (beat < a) return start
   return beat >= b || b <= a ? end : start + (end - start) * fraction(selected, (beat - a) / (b - a))
 }
-export function lineTransform(line: RecordData, audioSeconds: number, data: Timeline, visited = new Set<string>()): { x: number; y: number; rotation: number; alpha: number } {
-  if (visited.has(String(line.id))) return { x: 0, y: 0, rotation: 0, alpha: 1 }
-  visited.add(String(line.id))
+export type LineTransform = { x: number; y: number; rotation: number; alpha: number }
+const lineIndexes = new WeakMap<RecordData[], Map<string, RecordData>>()
+function lineIndex(data: Timeline) {
+  let result = lineIndexes.get(data.judge_lines)
+  if (!result) { result = new Map(data.judge_lines.map(l => [String(l.id), l])); lineIndexes.set(data.judge_lines, result) }
+  return result
+}
+function resolveLine(line: RecordData, audioSeconds: number, data: Timeline, results: Map<string, LineTransform>, visited: Set<string>): LineTransform {
+  const id = String(line.id), cached = results.get(id)
+  if (cached) return cached
+  if (visited.has(id)) return { x: 0, y: 0, rotation: 0, alpha: 1 }
+  visited.add(id)
   const raw = line.raw || line, beat = secondsToBeat(audioSeconds, data, Number(line.time_scale ?? raw.bpmfactor ?? 1)), layers = raw.eventLayers || []
   let x = 0, y = 0, rotation = 0, alpha = 0, hasAlpha = false
   for (const layer of layers) {
@@ -94,12 +121,22 @@ export function lineTransform(line: RecordData, audioSeconds: number, data: Time
     if (layer.alphaEvents?.length) { alpha += eventValue(layer.alphaEvents, beat, 0); hasAlpha = true }
   }
   const father = line.parent_id ?? (raw.father >= 0 ? `line_${raw.father}` : null)
-  const parent = father != null ? data.judge_lines.find(p => String(p.id) === String(father)) : undefined
+  const parent = father != null ? lineIndex(data).get(String(father)) : undefined
   if (parent) {
-    const p = lineTransform(parent, audioSeconds, data, visited), r = p.rotation * Math.PI / 180
+    const p = resolveLine(parent, audioSeconds, data, results, visited), r = p.rotation * Math.PI / 180
     const dx = x, dy = y
     x = p.x + dx * Math.cos(r) - dy * Math.sin(r); y = p.y + dx * Math.sin(r) + dy * Math.cos(r)
     if (raw.rotateWithFather !== false) rotation += p.rotation
   }
-  return { x, y, rotation, alpha: hasAlpha ? Math.max(0, Math.min(1, alpha / 255)) : 1 }
+  const result = { x, y, rotation, alpha: hasAlpha ? Math.max(0, Math.min(1, alpha / 255)) : 1 }
+  visited.delete(id); results.set(id, result)
+  return result
+}
+export function lineTransform(line: RecordData, audioSeconds: number, data: Timeline): LineTransform {
+  return resolveLine(line, audioSeconds, data, new Map(), new Set())
+}
+export function lineTransforms(audioSeconds: number, data: Timeline) {
+  const results = new Map<string, LineTransform>(), visiting = new Set<string>()
+  for (const line of data.judge_lines) resolveLine(line, audioSeconds, data, results, visiting)
+  return results
 }

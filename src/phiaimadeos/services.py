@@ -36,8 +36,8 @@ def load_candidate(candidate_id, store=None):
 def create_candidate(chart, conditions, music_asset_id=None, parent_id=None, source="baseline_only", manifest=None, store=None):
     store = store or Store()
     if len(canonical_bytes(chart)) > MAX_JSON_BYTES:
-        raise ValueError("候选谱面超过32 MiB，未创建不可再次读取的版本")
-    chart_to_ir(chart, conditions.get("chart_mode", "regular"), conditions.get("key_count"))
+        raise ValueError(f"候选谱面超过{MAX_JSON_BYTES // (1024 * 1024)} MiB，未创建不可再次读取的版本")
+    chart_to_ir(chart, conditions.get("chart_mode", "regular"), conditions.get("key_count"), copy_raw=False)
     identifier = new_id()
     path = store.settings.data_dir / "candidates" / identifier / "chart.json"
     atomic_json(path, chart, compact=True)

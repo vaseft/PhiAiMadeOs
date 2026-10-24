@@ -203,7 +203,7 @@ def import_one(path, archive_sha, source_root, run_id, store, asset_index, expec
                 try:
                     native = _json(source_path.read_bytes()) if source_path.stat().st_size <= MAX_JSON_BYTES else None
                     if native is None:
-                        raise ValueError("原始 JSON 超过32 MiB解析限额，原件已存档")
+                        raise ValueError(f"原始 JSON 超过{MAX_JSON_BYTES // (1024 * 1024)} MiB有界解析限额，原件已存档")
                     if "formatVersion" in native:
                         source_format = "phigros_v" + str(native["formatVersion"])
                         if "line.csv" in members or info.get("_pamos_metadata_format") == "csv":
@@ -218,9 +218,9 @@ def import_one(path, archive_sha, source_root, run_id, store, asset_index, expec
                         chart["_pamos_import"] = {"container": "zip", "info_format": "yaml", "info": info, "warnings": list(warnings)}
                     else:
                         raise ValueError("未识别 JSON 谱面方言")
-                    ir = chart_to_ir(chart, "regular", None)
+                    ir = chart_to_ir(chart, "regular", None, copy_raw=False)
                     if len(canonical_bytes(chart)) > MAX_JSON_BYTES:
-                        raise ValueError("转换后的共同 RPE 超过32 MiB，保留原件并等待更大格式支持")
+                        raise ValueError(f"转换后的共同 RPE 超过{MAX_JSON_BYTES // (1024 * 1024)} MiB，保留原件并报告资源限制")
                 except (ValueError, KeyError, TypeError, IndexError, OverflowError) as exc:
                     chart, conversion_error = None, str(exc)
             else:

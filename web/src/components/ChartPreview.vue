@@ -1,22 +1,25 @@
 <script setup lang="ts">
-import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { api, audioUrl } from '../api'
 import { time } from '../state'
-import { beatToSeconds, secondsToBeat, lineTransform } from '../timeline'
+import { beatNumber, beatToSeconds, secondsToBeat, lineTransforms } from '../timeline'
 import type { Note, Timeline } from '../types'
 const props = defineProps<{ candidateId: string; musicId: string }>()
 const emit = defineEmits<{ time: [value: number]; selectNote: [note: Note] }>()
 const audio = ref<HTMLAudioElement>()
 const canvas = ref<HTMLCanvasElement>()
 const wave = ref<HTMLCanvasElement>()
-const data = ref<Timeline | null>(null)
-const peaks = ref<number[]>([])
-const onsets = ref<number[]>([])
+// Pages are immutable snapshots. Avoid recursively proxying every baked event.
+const data = shallowRef<Timeline | null>(null)
+const peaks = shallowRef<number[]>([])
+const onsets = shallowRef<number[]>([])
 const current = ref(0), duration = ref(0), playing = ref(false), rate = ref(1), error = ref(''), audioError = ref(''), loading = ref(false)
 const showNotes = ref(true), showLines = ref(true), showIds = ref(false), showWave = ref(true), showOnsets = ref(true), showEvents = ref(true)
 const hitTargets: { x: number; y: number; r: number; note: Note }[] = []
 let frame = 0, mounted = false, observer: ResizeObserver | undefined, sequence = 0, pageStart = -100, fetchingPage = false, retryAfter = 0
 let waveDuration = 0
+let waveDirty = true, canvasDirty = true, lastDrawTime = NaN
+let waveBase: HTMLCanvasElement | undefined, wavePlayed: HTMLCanvasElement | undefined, waveOverlay: HTMLCanvasElement | undefined
 const metadata = computed(() => data.value ? `${data.value.chart_mode === 'pure_keys' ? `固定 ${data.value.key_count}K` : '动态判定线'} · 当前窗口 ${data.value.notes?.length || 0} 个音符` : '等待时间轴')
 function fit(el: HTMLCanvasElement) {
   const rect = el.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2)
@@ -37,13 +40,14 @@ async function load() {
   audio.value?.pause(); if (audio.value) { try { audio.value.currentTime = 0 } catch {} } playing.value = false
   if (!props.candidateId) return
   loading.value = true
+  const seq = sequence
   await loadPage(0, true)
+  if (seq !== sequence) return
   if (props.musicId) {
-    const seq = sequence
     try { const result = await api(`/assets/${props.musicId}/waveform`); if (seq === sequence) { peaks.value = (result.peaks || []).map((v: any) => Array.isArray(v) ? Math.max(...v.map((n: any) => Math.abs(Number(n)))) : Math.abs(Number(v))); waveDuration = Number(result.duration_s) || 0; onsets.value = result.onsets_s || [] } }
     catch (e) { if (seq === sequence) error.value = `波形不可用：${e instanceof Error ? e.message : '未返回数据'}` }
   }
-  loading.value = false
+  if (seq === sequence) loading.value = false
 }
 function seek(value: number) { const t = Math.max(0, Math.min(duration.value || Infinity, value)); if (audio.value) { try { audio.value.currentTime = t } catch { /* Metadata not yet available; the requested static frame remains visible. */ } } current.value = t; emit('time', t); void loadPage(t) }
 function nativeSeek() { current.value = audio.value?.currentTime || 0; emit('time', current.value); void loadPage(current.value) }
@@ -57,7 +61,8 @@ function jumpBar(direction: number) { if (data.value) seek(beatToSeconds(Math.ma
 function draw() {
   if (!mounted) return
   if (audio.value && !audio.value.paused) { current.value = audio.value.currentTime; emit('time', current.value); void loadPage(current.value) }
-  if (canvas.value) {
+  if (canvas.value && (canvasDirty || lastDrawTime !== current.value)) {
+    canvasDirty = false; lastDrawTime = current.value
     const { ctx, w, h } = fit(canvas.value)
     ctx.clearRect(0, 0, w, h); ctx.fillStyle = '#111b29'; ctx.fillRect(0, 0, w, h)
     const grad = ctx.createRadialGradient(w * .5, h * .65, 0, w * .5, h * .5, w * .7); grad.addColorStop(0, '#203448'); grad.addColorStop(1, '#111b29'); ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h)
@@ -71,9 +76,9 @@ function draw() {
         for (let k = 0; k < K; k++) { const x = k * w / K; ctx.fillStyle = k % 2 ? '#ffffff04' : '#ffffff09'; ctx.fillRect(x, 0, w / K, h); ctx.strokeStyle = '#ffffff10'; ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); ctx.fillStyle = '#8395a8'; ctx.font = '11px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(String(k + 1), x + w / (2 * K), h - 15) }
         if (showLines.value) { ctx.strokeStyle = '#d0e8f6'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, judgeY); ctx.lineTo(w, judgeY); ctx.stroke() }
       }
-      const lineMap = new Map<string, { x: number; y: number; rotation: number; alpha: number }>()
+      const lineMap = lineTransforms(current.value, d)
       for (const line of d.judge_lines || []) {
-        const t = lineTransform(line, current.value, d); lineMap.set(String(line.id), t)
+        const t = lineMap.get(String(line.id))!
         if (!pure && showLines.value) { ctx.save(); ctx.globalAlpha = t.alpha; ctx.translate(w / 2 + t.x * w / 2, h / 2 - t.y * h / 2); ctx.rotate(-t.rotation * Math.PI / 180); ctx.strokeStyle = '#d2e9ef'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-w * .5, 0); ctx.lineTo(w * .5, 0); ctx.stroke(); if (showIds.value) { ctx.fillStyle = '#8ab9c5'; ctx.font = '10px monospace'; ctx.fillText(`LINE ${line.id}`, -w * .38, -8) } ctx.restore() }
       }
       if (showNotes.value) for (const n of d.notes || []) {
@@ -104,19 +109,56 @@ function draw() {
 function drawWave() {
   if (!wave.value) return
   const { ctx, w, h } = fit(wave.value), dur = waveDuration || duration.value || 1
-  ctx.clearRect(0, 0, w, h); ctx.fillStyle = '#f1f4f6'; ctx.fillRect(0, 0, w, h)
-  if (showWave.value && peaks.value.length) { const mid = h * .36, max = Math.max(1, ...peaks.value.slice(0, 10000)); for (let x = 0; x < w; x += 3) { const idx = Math.floor(x / w * peaks.value.length), a = Math.min(1, (peaks.value[idx] || 0) / max); ctx.fillStyle = x / w * dur < current.value ? '#397f8b' : '#a3b8c2'; ctx.fillRect(x, mid - a * (h * .28), 2, Math.max(1, a * h * .56)) } }
-  if (showOnsets.value) for (const onset of onsets.value) { ctx.strokeStyle = '#d69a51'; ctx.beginPath(); ctx.moveTo(Number(onset) / dur * w, 0); ctx.lineTo(Number(onset) / dur * w, h * .65); ctx.stroke() }
-  if (showNotes.value) for (const n of data.value?.notes || []) { ctx.fillStyle = String(n.kind).toUpperCase() === 'HOLD' ? '#bd9859' : '#5b9baa'; ctx.fillRect(n.time_s / dur * w, h * .76, Math.max(2, ((n.end_time_s || n.time_s) - n.time_s) / dur * w), 5) }
-  if (showEvents.value && data.value) { const map = data.value; for (const l of map.judge_lines || []) for (const layer of l.raw?.eventLayers || []) for (const event of [...(layer.moveXEvents || []), ...(layer.moveYEvents || []), ...(layer.rotateEvents || [])]) { ctx.fillStyle = '#a29bc1'; const x = beatToSeconds(Number.isFinite(event.startTime) ? event.startTime : (Array.isArray(event.startTime) ? event.startTime[0] + event.startTime[1] / event.startTime[2] : 0), map) / dur * w; ctx.fillRect(x, h * .9, 2, 4) } }
-  ctx.strokeStyle = '#202f40'; ctx.lineWidth = 1.5; const playX = current.value / dur * w; ctx.beginPath(); ctx.moveTo(playX, 0); ctx.lineTo(playX, h); ctx.stroke()
+  if (!waveBase || !wavePlayed || !waveOverlay || waveBase.width !== wave.value.width || waveBase.height !== wave.value.height) waveDirty = true
+  if (waveDirty) {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    waveBase ||= document.createElement('canvas'); wavePlayed ||= document.createElement('canvas'); waveOverlay ||= document.createElement('canvas')
+    const contexts = [waveBase, wavePlayed, waveOverlay].map(el => { el.width = wave.value!.width; el.height = wave.value!.height; const c = el.getContext('2d')!; c.setTransform(dpr, 0, 0, dpr, 0, 0); return c })
+    const [base, played, overlay] = contexts as [CanvasRenderingContext2D, CanvasRenderingContext2D, CanvasRenderingContext2D]
+    base.fillStyle = '#f1f4f6'; base.fillRect(0, 0, w, h)
+    if (showWave.value && peaks.value.length) {
+      let max = 1
+      for (const value of peaks.value) max = Math.max(max, value)
+      base.fillStyle = '#a3b8c2'; played.fillStyle = '#397f8b'
+      for (let x = 0; x < w; x += 3) { const idx = Math.floor(x / w * peaks.value.length), a = Math.min(1, (peaks.value[idx] || 0) / max), y = h * .36 - a * h * .28, height = Math.max(1, a * h * .56); base.fillRect(x, y, 2, height); played.fillRect(x, y, 2, height) }
+    }
+    // This is a pixel overview, not an event rewrite: coincident markers share a
+    // pixel while every source event remains available to timeline evaluation.
+    const pixels = Math.max(1, Math.ceil(w)), onsetPixels = new Uint8Array(pixels), eventPixels = new Uint8Array(pixels)
+    if (showOnsets.value) {
+      for (const onset of onsets.value) { const x = Math.floor(Number(onset) / dur * w); if (x >= 0 && x < pixels) onsetPixels[x] = 1 }
+      overlay.strokeStyle = '#d69a51'; overlay.beginPath()
+      for (let x = 0; x < pixels; x++) if (onsetPixels[x]) { overlay.moveTo(x, 0); overlay.lineTo(x, h * .65) }
+      overlay.stroke()
+    }
+    if (showNotes.value) for (const n of data.value?.notes || []) { overlay.fillStyle = String(n.kind).toUpperCase() === 'HOLD' ? '#bd9859' : '#5b9baa'; overlay.fillRect(n.time_s / dur * w, h * .76, Math.max(2, ((n.end_time_s ?? n.time_s) - n.time_s) / dur * w), 5) }
+    if (showEvents.value && data.value) {
+      const map = data.value
+      for (const line of map.judge_lines || []) for (const layer of (line.raw || line).eventLayers || []) {
+        if (!layer) continue
+        for (const key of ['moveXEvents', 'moveYEvents', 'rotateEvents']) for (const event of layer[key] || []) {
+          const x = Math.floor(beatToSeconds(beatNumber(event.startTime ?? event.start_beat), map, Number(line.time_scale ?? line.raw?.bpmfactor ?? 1)) / dur * w)
+          if (x >= 0 && x < pixels) eventPixels[x] = 1
+        }
+      }
+      overlay.fillStyle = '#a29bc1'
+      for (let x = 0; x < pixels; x++) if (eventPixels[x]) overlay.fillRect(x, h * .9, 2, 4)
+    }
+    waveDirty = false
+  }
+  const playX = Math.max(0, Math.min(w, current.value / dur * w))
+  ctx.clearRect(0, 0, w, h); ctx.drawImage(waveBase!, 0, 0, w, h)
+  ctx.save(); ctx.beginPath(); ctx.rect(0, 0, playX, h); ctx.clip(); ctx.drawImage(wavePlayed!, 0, 0, w, h); ctx.restore()
+  ctx.drawImage(waveOverlay!, 0, 0, w, h)
+  ctx.strokeStyle = '#202f40'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(playX, 0); ctx.lineTo(playX, h); ctx.stroke()
 }
 function waveClick(e: MouseEvent) { const el = wave.value!; const r = el.getBoundingClientRect(); seek((e.clientX - r.left) / r.width * (waveDuration || duration.value)) }
-function noteClick(e: MouseEvent) { const r = canvas.value!.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top; const hit = hitTargets.slice().reverse().find(t => Math.abs(t.x - x) < t.r && Math.abs(t.y - y) < 14); if (hit) { audio.value?.pause(); emit('selectNote', hit.note) } }
+function noteClick(e: MouseEvent) { const r = canvas.value!.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top; for (let i = hitTargets.length - 1; i >= 0; i--) { const hit = hitTargets[i]!; if (Math.abs(hit.x - x) < hit.r && Math.abs(hit.y - y) < 14) { audio.value?.pause(); emit('selectNote', hit.note); break } } }
 watch(() => [props.candidateId, props.musicId], load)
 watch(rate, value => { if (audio.value) audio.value.playbackRate = value })
-onMounted(() => { mounted = true; void load(); observer = new ResizeObserver(() => { drawWave() }); if (canvas.value) observer.observe(canvas.value); frame = requestAnimationFrame(draw) })
-onActivated(() => { mounted = true; cancelAnimationFrame(frame); frame = requestAnimationFrame(draw) })
+watch([data, peaks, onsets, duration, showWave, showNotes, showLines, showIds, showOnsets, showEvents, loading], () => { canvasDirty = true; waveDirty = true }, { flush: 'sync' })
+onMounted(() => { mounted = true; void load(); observer = new ResizeObserver(() => { canvasDirty = true; waveDirty = true }); if (canvas.value) observer.observe(canvas.value); if (wave.value) observer.observe(wave.value); frame = requestAnimationFrame(draw) })
+onActivated(() => { mounted = true; canvasDirty = true; waveDirty = true; cancelAnimationFrame(frame); frame = requestAnimationFrame(draw) })
 onDeactivated(() => { mounted = false; cancelAnimationFrame(frame); audio.value?.pause() })
 onUnmounted(() => { mounted = false; ++sequence; cancelAnimationFrame(frame); observer?.disconnect(); audio.value?.pause() })
 defineExpose({ seek })

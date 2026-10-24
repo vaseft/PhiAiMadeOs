@@ -61,3 +61,10 @@ local_state/
 release/
 *.pamos-*.json
 *.bundle
+
+# Machine-local Windows tools, runtimes, caches and upstream checkouts
+/.tools/
+/.runtime/
+/.cache/
+/.downloads/
+/.local/

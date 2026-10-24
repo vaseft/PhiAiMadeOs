@@ -15,10 +15,10 @@ import time
 
 from .models import (ARCH_VERSION, FEATURE_RATE, KINDS, MAX_AUDIO_FRAMES,
                      MAX_LINES, MAX_NOTE_SLOTS, MOTION_PROPERTIES, MOTION_SCALES,
-                     TIME_CELLS, ModelError, build_model, encode_conditions)
+                     TIME_CELLS, POSITION_X_SCALE, ModelError, build_model, encode_conditions, model_config)
 from ._model_data import (assert_no_noise, canonical_hash, feature_window,
                           file_hash, finite, line_vectors, load_features,
-                          note_queries, note_vectors, relative_path, safe_path)
+                          note_queries, motion_queries, note_vectors, relative_path, safe_path)
 
 
 def _emit(callback, **event):
@@ -54,11 +54,20 @@ def _verify_bundle(bundle, conditions, analysis, root):
     if mode == "pure_keys" and conditions["key_count"] not in bundle.get("key_counts", []):
         raise _unavailable("该模型没有所选 K 的独立训练/验证覆盖。")
     stages = ("note_rhythm", "placement") if mode == "pure_keys" else ("note_rhythm", "line_motion", "placement")
+    capacities = set()
     verified = {}
     for stage in stages:
         metadata = bundle["stages"].get(stage)
         if not isinstance(metadata, dict) or metadata.get("training_state") != "complete":
             raise _unavailable("所需模型阶段没有完成真实训练。", stage=stage)
+        config = metadata.get("config")
+        try:
+            expected = model_config(stage, config.get("max_lines")) if isinstance(config, dict) else None
+        except ModelError as exc:
+            raise _unavailable("模型阶段的判定线容量无效。", stage=stage) from exc
+        if not isinstance(config, dict) or config != expected:
+            raise _unavailable("模型阶段缺少一致的判定线容量与架构配置。", stage=stage)
+        capacities.add(config["max_lines"])
         digest = metadata.get("checkpoint_sha256")
         if not isinstance(digest, str) or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
             raise _unavailable("模型权重没有完整 SHA-256 溯源。", stage=stage)
@@ -73,6 +82,8 @@ def _verify_bundle(bundle, conditions, analysis, root):
         if mode == "pure_keys" and conditions["key_count"] not in metadata.get("key_counts", []):
             raise _unavailable("模型阶段不覆盖所选固定 K。", stage=stage)
         verified[stage] = (path, metadata)
+    if len(capacities) != 1 or bundle.get("max_lines") not in capacities:
+        raise _unavailable("模型组合的各阶段判定线容量不一致。")
     return verified
 
 
@@ -87,6 +98,8 @@ def _load_stage(name, verified, feature_version, torch, device):
             raise _unavailable("权重内部特征版本不匹配。", stage=name)
         if not isinstance(state.get("config"), dict):
             raise _unavailable("权重内部缺少可校验的架构配置。", stage=name)
+        if state["config"] != metadata.get("config"):
+            raise _unavailable("权重内部架构与登记阶段配置不一致。", stage=name)
         model = build_model(name, state.get("config"))
         model.load_state_dict(state["model"], strict=True)
     except ModelError:
@@ -171,7 +184,7 @@ def _place_safely(notes, conditions, line_count, duration, repairs):
             occupied = [p for p in occupied if p["end"] + 0.03 > note["time"]]
             desired_line, desired_x = note["line_ranking"][0], note["x"]
             chosen = None
-            x_candidates = [max(-640.0, min(640.0, desired_x + shift)) for shift in (0, -72, 72, -144, 144, -216, 216, -288, 288)]
+            x_candidates = [max(-POSITION_X_SCALE, min(POSITION_X_SCALE, desired_x + shift)) for shift in (0, -72, 72, -144, 144, -216, 216, -288, 288)]
             for line in note["line_ranking"]:
                 if line >= line_count:
                     continue
@@ -216,7 +229,7 @@ def _chart_from_predictions(notes, events, parents, bpm, duration, conditions, f
                     layer[name].append({"startTime": formats.seconds_to_beat(event["time"], chart["BPMList"]),
                                         "endTime": formats.seconds_to_beat(event["end"], chart["BPMList"]),
                                         "start": event["start_value"], "end": event["end_value"],
-                                        "easingType": event["easing"] + 1, "easingLeft": 0.0, "easingRight": 1.0,
+                                        "easingType": event["easing"] + 1, "easingLeft": event.get("easing_left", 0.0), "easingRight": event.get("easing_right", 1.0),
                                         "bezier": 0, "bezierPoints": [0, 0, 1, 1], "linkgroup": 0})
             line["eventLayers"] = [layer]
     predictions_by_id = {n["id"]: n for n in notes}
@@ -301,7 +314,7 @@ def generate_learned(analysis: dict, conditions: dict, bundle: dict, project_roo
                     selected = [n for n in notes if n["window"] == index]
                     with torch.autocast(device_type=device.type, dtype=amp_dtype, enabled=device.type == "cuda"):
                         prediction = model(tensor(feature_window(features, start, end)), condition_tensor,
-                                           tensor([[i / 63, math.log1p(width), 0, 0, 0, 0, 0, 1] for i in range(64)]),
+                                           tensor(motion_queries(width, model.max_lines)),
                                            tensor(note_vectors(selected, start, width)))
                     _validate_prediction(prediction, torch)
                     p = {k: v[0].float().cpu() for k, v in prediction.items()}
@@ -323,6 +336,7 @@ def generate_learned(analysis: dict, conditions: dict, bundle: dict, project_roo
                         finish = _bounded(finish, begin, duration, repairs, "event_end_s", event_id)
                         events.append({"id": event_id, "time": begin, "end": finish, "line": line, "property": prop,
                                        "easing": int(p["easing"][slot].argmax()), "start_value": values[0], "end_value": values[1],
+                                       "easing_left": float(p["easing_bounds"][slot, 0]), "easing_right": float(p["easing_bounds"][slot, 1]),
                                        "confidence": float(presence[slot])})
                     del prediction, p
                     _emit(progress, phase="line_motion", progress=0.3 + 0.3 * (index + 1) / len(windows), message="预测判定线标准运动事件并衔接窗口。")
@@ -343,14 +357,15 @@ def generate_learned(analysis: dict, conditions: dict, bundle: dict, project_roo
                 with torch.autocast(device_type=device.type, dtype=amp_dtype, enabled=device.type == "cuda"):
                     prediction = model(tensor(feature_window(features, start, end)), condition_tensor,
                                        tensor(note_vectors(selected, start, width)),
-                                       tensor(line_vectors(events, parents, start, width, pure=conditions["chart_mode"] == "pure_keys")),
+                                       tensor(line_vectors(events, parents, start, width, pure=conditions["chart_mode"] == "pure_keys",
+                                                           max_lines=model.max_lines)),
                                        key_count=conditions.get("key_count") or 6)
                 _validate_prediction(prediction, torch)
                 p = {k: v[0].float().cpu() for k, v in prediction.items()}
                 for j, note in enumerate(selected):
                     note.update(line_ranking=p["line"][j, :line_count].argsort(descending=True).tolist(),
                                 lane_ranking=p["lane"][j, :(conditions.get("key_count") or 6)].argsort(descending=True).tolist(),
-                                x=float(p["x"][j]) * 675, above=int(p["above"][j].argmax()),
+                                x=float(p["x"][j]) * POSITION_X_SCALE, above=int(p["above"][j].argmax()),
                                 speed=_bounded(float(p["speed"][j]), 0.1, 10, repairs, "note_speed", note["id"]),
                                 y_offset=float(p["y_offset"][j]) * 450)
                 del prediction, p

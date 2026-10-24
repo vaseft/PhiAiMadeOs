@@ -19,7 +19,7 @@ import sys
 import time
 import uuid
 
-from .models import ARCH_VERSION, MOTION_DICTIONARY_VERSION, ModelError, build_model, model_config, set_motion_dictionary
+from .models import ARCH_VERSION, MAX_LINES, MOTION_DICTIONARY_VERSION, POSITION_X_SCALE, ModelError, build_model, model_config, set_motion_dictionary
 from ._model_data import (SongCache, batch_for, build_windows, canonical_hash, fit_motion_dictionary,
                           file_hash, read_manifest, relative_path, safe_path)
 
@@ -188,13 +188,13 @@ def _loss(stage, prediction, target, common, song, torch):
                 parts["lane"] = _masked_mean(F.cross_entropy(prediction["lane"].transpose(1, 2), target["lane"], reduction="none"), positive)
             parts["density"] = F.smooth_l1_loss(prob.sum(1) / 192, truth.sum(1) / 192)
         else:
-            for field in ("start", "duration", "values"):
+            for field in ("start", "duration", "values", "easing_bounds"):
                 parts[field] = _masked_mean(F.smooth_l1_loss(prediction[field], target[field], reduction="none"), positive)
             parts["line_count"] = F.cross_entropy(prediction["line_count"], target["line_count"])
             count = len(song["parents"])
             parent_logits = prediction["parents"][:, :count]
             parts["parents"] = F.cross_entropy(parent_logits.transpose(1, 2), target["parents"])
-            invalid = torch.arange(9, device=parent_logits.device)[None, :] > torch.arange(count, device=parent_logits.device)[:, None]
+            invalid = torch.arange(parent_logits.shape[-1], device=parent_logits.device)[None, :] > torch.arange(count, device=parent_logits.device)[:, None]
             parts["parent_dag"] = (parent_logits.softmax(-1) * invalid[None]).sum(-1).mean()
     else:
         valid = target["valid"]
@@ -219,7 +219,7 @@ def _loss(stage, prediction, target, common, song, torch):
             else:
                 x = prediction["x"][0]
                 probability = prediction["line"].softmax(-1)[0]
-                collision = F.relu(0.035 - (x[:, None] - x[None, :]).abs()) * (probability @ probability.T)
+                collision = F.relu(24.0 / POSITION_X_SCALE - (x[:, None] - x[None, :]).abs()) * (probability @ probability.T)
             parts["overlap"] = _masked_mean(collision, simultaneous) * 0.1
     total = sum(parts.values())
     if not bool(torch.isfinite(total)):
@@ -259,7 +259,9 @@ def run_training(request: dict, project_root, progress=None) -> dict:
         raise ModelError("INVALID_TRAIN_CONFIG", "epoch、梯度累积或随机种子超出允许范围。")
     manifest_path = safe_path(root, request.get("manifest_path"))
     manifest, samples = read_manifest(manifest_path, root)
-    cache = SongCache(root, samples)
+    max_lines = request.get("max_lines", MAX_LINES)
+    model_config("line_motion", max_lines)
+    cache = SongCache(root, samples, max_lines=max_lines)
     _emit(progress, phase="indexing", progress=0.01, message="核对完整标签与窗口容量。")
     windows, window_report = build_windows(cache)
     if stage in ("all", "note_rhythm", "placement"):
@@ -270,8 +272,8 @@ def run_training(request: dict, project_root, progress=None) -> dict:
     config = {"epochs": epochs, "seed": seed, "grad_accum": accumulation, "microbatch": 1, "stage": stage,
               "learning_rate": 0.0002, "weight_decay": 0.01, "gradient_clip": 1.0, "warmup_ratio": 0.05,
               "scheduler": "warmup_cosine", "checkpoint_optimizer_steps": 50,
-              "loss_version": "masked-focal-ce-huber-geometry-v1", "window_index_version": "adaptive-384-192-64-v1",
-              "models": {s: model_config(s) for s in STAGES}}
+              "loss_version": "masked-focal-ce-huber-easing-geometry-v2", "window_index_version": "adaptive-audio-domain-384-192-lines-v2",
+              "max_lines": max_lines, "models": {s: model_config(s, max_lines) for s in STAGES}}
     fingerprints = [{k: s.get(k) for k in ("chart_id", "music_asset_id", "group_id", "split", "chart_file_sha256", "chart_sha256", "feature_sha256")} for s in samples]
     split_sha = canonical_hash(fingerprints)
     stages = list(STAGES if stage == "all" else (stage,))
@@ -378,7 +380,7 @@ def run_training(request: dict, project_root, progress=None) -> dict:
             motion_dictionary = None
             if name == "line_motion":
                 motion_dictionary = previous.get("motion_dictionary") or fit_motion_dictionary(cache, stage_seed)
-            model = build_model(name).to(device)
+            model = build_model(name, config["models"][name]).to(device)
             if motion_dictionary is not None:
                 set_motion_dictionary(model, motion_dictionary)
             optimizer = torch.optim.AdamW(model.parameters(), lr=config["learning_rate"], weight_decay=config["weight_decay"], foreach=False)
@@ -395,7 +397,7 @@ def run_training(request: dict, project_root, progress=None) -> dict:
             start_epoch, cursor, optimizer_step, order = 0, 0, 0, None
             best_val, stale = None, 0
             stage_info = {"id": uuid.uuid4().hex, "run_id": run_id, "stage": name, "created_at": _now(), "status": "experimental",
-                          "training_state": "running", "config": model_config(name), "feature_version": samples[0]["feature_version"],
+                          "training_state": "running", "config": config["models"][name], "feature_version": samples[0]["feature_version"],
                           "weight_format": "torch_tensor_state_dict", "stage_seed": stage_seed,
                           "motion_dictionary": motion_dictionary,
                           "train_groups": sorted({samples[windows[i].sample_index]["group_id"] for i in train_indices}),
@@ -531,7 +533,7 @@ def run_training(request: dict, project_root, progress=None) -> dict:
                 if improved:
                     best_val, stale = val_loss, 0
                     weights = stage_dir / f"weights-{optimizer_step:09d}-{uuid.uuid4().hex[:8]}.pt"
-                    weight_sha = _save_torch(weights, {"model": model.state_dict(), "config": model_config(name),
+                    weight_sha = _save_torch(weights, {"model": model.state_dict(), "config": config["models"][name],
                                 "feature_version": samples[0]["feature_version"], "run_id": run_id,
                                 "train_config_sha256": config_sha, "dataset_manifest_sha256": manifest_sha}, torch)
                     stage_info.update(checkpoint_path=relative_path(root, weights), checkpoint_sha256=weight_sha,
@@ -566,6 +568,7 @@ def run_training(request: dict, project_root, progress=None) -> dict:
         key_counts = sorted(set(note.get("key_counts", [])) & set(placement.get("key_counts", [])))
         record.update(training_state="complete", completed_at=_now(), models=list(bundle_stages.values()),
                       bundle={"id": run_id, "run_id": run_id, "status": "experimental", "arch_version": ARCH_VERSION,
+                              "max_lines": max_lines,
                               "stages": bundle_stages, "feature_version": samples[0]["feature_version"],
                               "supported_modes": sorted(modes), "key_counts": key_counts,
                               "coverage_warning": "仅表示有分组训练和验证数据；生成质量、客户端试玩及模型能力尚未验收。"})

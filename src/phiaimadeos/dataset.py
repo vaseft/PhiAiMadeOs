@@ -50,9 +50,9 @@ def _sha_file(path):
 def build_manifest(samples, output_dir, seed=42):
     """Validate every sample or reject all; no label is silently dropped.
 
-    A human-provided group_id/song_group_id must cover transcodes, cuts and
-    near-duplicates. Exact audio hashes/asset IDs additionally merge groups.
-    Fingerprint-based near-duplicate discovery is not claimed.
+    Groups require human identity or source-bound export/audio evidence.
+    Exact audio hashes/asset IDs additionally merge groups. Discovery is a
+    separate preparation step; building a manifest does not certify identity.
     """
     if not isinstance(samples, list) or not samples:
         raise ValueError("数据集至少需要一个明确授权的样本")
@@ -82,8 +82,9 @@ def build_manifest(samples, output_dir, seed=42):
                 raise ValueError("allowed_actions 必须是显式字符串数组")
             # A source label is provenance, not a grant of rights. Explicit
             # per-record training permission is required above for every source.
-            if item.get("human_verified_alignment") is not True:
-                raise ValueError("训练样本必须由人工明确确认音乐绑定与 offset 对齐")
+            from .training_readiness import alignment_ready, training_group
+            if not alignment_ready(item):
+                raise ValueError("训练样本缺少人工对齐或哈希绑定的游戏导出元数据核对记录")
             for key in ("chart_id", "music_asset_id", "chart_path", "feature_path", "conditions"):
                 if key not in item or item[key] is None:
                     raise ValueError(f"缺少字段 {key}")
@@ -94,8 +95,8 @@ def build_manifest(samples, output_dir, seed=42):
             group = item.get("group_id", item.get("song_group_id"))
             if not isinstance(group, str) or not group.strip():
                 raise ValueError("必须明确给出歌曲簇 group_id，不能按谱面随机拆分")
-            if item.get("group_method") == "exact_audio_bytes_only":
-                raise ValueError("精确音频去重不等于人工歌曲簇；请确认转码、剪辑及不同难度的同源分组")
+            if training_group(item) != group:
+                raise ValueError("歌曲簇缺少人工确认或有效导出身份/音频联合分组依据")
             conditions = item["conditions"]
             if not isinstance(conditions, dict):
                 raise ValueError("conditions 必须为完整标签对象")
@@ -127,7 +128,7 @@ def build_manifest(samples, output_dir, seed=42):
                                                          or any(c not in "0123456789abcdef" for c in item["audio_sha256"].lower())):
                 raise ValueError("audio_sha256 必须为64位十六进制字符串")
             chart = read_chart(chart_path)
-            ir = chart_to_ir(chart, mode, key_count)
+            ir = chart_to_ir(chart, mode, key_count, copy_raw=False)
             if has_noise(chart):
                 raise ValueError("噪域只读，V1 禁止将含噪域样本加入训练")
             chart_digest, feature_digest = _sha_file(chart_path), _sha_file(feature_path)
@@ -203,7 +204,7 @@ def build_manifest(samples, output_dir, seed=42):
     training_count = count - validation_count - test_count
     assignments = {group: ("train" if index < training_count else "val" if index < training_count + validation_count else "test")
                    for index, group in enumerate(groups)}
-    warnings = ["仅按人工歌曲簇与精确音频身份防泄漏；近似歌曲/裁切/变速版本仍需人工分组或指纹复核",
+    warnings = ["按已记录歌曲簇与精确音频身份联合拆分；自动导出身份/有序chroma分组不保证识别全部变速与重混版本",
                 "训练/GPU/独立锁定测试集评估 NOT RUN"]
     if count < 10:
         warnings.append("歌曲簇不足10个，拆分不能代表泛化能力；小样本可能缺少 val/test")

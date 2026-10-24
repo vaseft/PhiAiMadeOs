@@ -76,7 +76,7 @@ class Jobs:
             return current
         self.store.update("jobs", job_id, {"status": "cancelling"})
         process = self.active.get(job_id)
-        if process is None and current.get("kind") == "library_import":
+        if process is None and current.get("kind") in {"library_import", "library_reprocess", "audio_prepare", "dataset_prepare"}:
             # The explicit local CLI owns this job and stops after its current
             # atomic package. It records cancelled only after it actually stops.
             return self.store.get("jobs", job_id)

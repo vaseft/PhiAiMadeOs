@@ -34,7 +34,8 @@ export async function refresh(all = false) {
     if (all) await openSession(true)
     const status = await api('/status')
     state.status = status; state.connected = true
-    const resources = all ? ['assets', 'charts', 'candidates', 'jobs', 'models', 'datasets', 'training/runs', 'capabilities'] : ['candidates', 'jobs', 'models', 'training/runs', ...(status.counts?.datasets !== state.datasets.length ? ['datasets'] : []), ...(status.counts?.assets !== state.assets.length ? ['assets'] : []), ...(status.counts?.charts !== state.charts.length || state.jobs.some(job => job.kind === 'library_reprocess' && activeJob(job)) ? ['charts'] : [])]
+    const preparing = [...state.jobs, ...(status.jobs || [])].some((job: Job) => ['audio_prepare', 'dataset_prepare'].includes(job.kind || '') && (activeJob(job) || !state.jobs.some(previous => previous.id === job.id && previous.updated_at === job.updated_at && jobState(previous) === jobState(job))))
+    const resources = all ? ['assets', 'charts', 'candidates', 'jobs', 'models', 'datasets', 'training/runs', 'capabilities'] : ['candidates', 'jobs', 'models', 'training/runs', ...(status.counts?.datasets !== state.datasets.length ? ['datasets'] : []), ...(status.counts?.assets !== state.assets.length || preparing ? ['assets'] : []), ...(status.counts?.charts !== state.charts.length || preparing || state.jobs.some(job => job.kind === 'library_reprocess' && activeJob(job)) ? ['charts'] : [])]
     const results = await Promise.allSettled(resources.map(path => api('/' + path)))
     results.forEach((r, i) => {
       if (r.status === 'fulfilled') {
@@ -52,6 +53,8 @@ export function label(value: unknown) {
   Object.assign(labels, { draft: '草稿', awaiting_review: '待人工审核', blocked: '审计阻断', not_run: '尚未运行', interrupted: '已中断', partial: '部分完成', analysis: '音频分析', generation: '谱面生成', learned_generation: '模型生成', audit: '独立审计', dataset: '构建数据集', postprocess: '局部建议', training: '模型训练' })
   labels.library_import = '导入本地素材库'
   labels.library_reprocess = '补处理容量与时序受限谱面'
+  labels.audio_prepare = '准备音频特征'
+  labels.dataset_prepare = '核对训练素材与歌曲分组'
   const text = String(value ?? '—'); return labels[text.toLowerCase()] || text
 }
 export function time(value?: number) { if (!Number.isFinite(value)) return '—'; const n = Math.max(0, value!); return `${Math.floor(n / 60).toString().padStart(2, '0')}:${(n % 60).toFixed(3).padStart(6, '0')}` }

@@ -5,7 +5,7 @@ from fractions import Fraction
 import math
 import re
 from datetime import datetime, timedelta, timezone
-from .formats import beat_fraction, beat_triplet, chart_to_ir, ir_to_chart, chart_hash, lane_centers, noise_snapshot
+from .formats import beat_fraction, beat_triplet, beat_to_seconds, chart_to_ir, ir_to_chart, chart_hash, lane_centers, noise_snapshot
 from .services import load_candidate, create_candidate, run_audit, cached_analysis
 from .settings import atomic_json, new_id, now
 from .store import Store
@@ -68,6 +68,14 @@ def apply_operations(chart, conditions, operations, window):
     operations = [adapt_operation(op, ir) for op in operations]
     used = set()
     changes = []
+    def note_view(note):
+        view = {k: deepcopy(v) for k, v in note.items() if k != "raw"}
+        line = next(l for l in ir["judge_lines"] if l["id"] == note["line_id"])
+        scale = line.get("time_scale", 1)
+        offset = ir["offset_ms"] / 1000 + ir.get("info_offset_s", 0)
+        view["time_s"] = beat_to_seconds(note["beat"], ir["bpm_map"]) * scale + offset
+        view["end_time_s"] = beat_to_seconds(note["end_beat"], ir["bpm_map"]) * scale + offset
+        return view
     for operation in operations:
         op = operation.get("op")
         target_id = operation.get("target_id")
@@ -107,7 +115,7 @@ def apply_operations(chart, conditions, operations, window):
                     "raw": {"alpha": 255, "size": 1, "speed": 1, "visibleTime": 999999, "yOffset": 0}}
             note["raw"]["pamosId"] = note["id"]
             ir["notes"].append(note)
-            changes.append({"op": op, "target_id": note["id"], "before": None, "after": {k: v for k, v in note.items() if k != "raw"}})
+            changes.append({"op": op, "target_id": note["id"], "before": None, "after": note_view(note)})
             continue
         if op == "TUNE_LINE_EVENT":
             if conditions.get("chart_mode") == "pure_keys":
@@ -147,7 +155,7 @@ def apply_operations(chart, conditions, operations, window):
         b, end = _beat(note["beat"]), _beat(note["end_beat"])
         if not left <= b <= right:
             raise ValueError("目标音符不在修改窗口")
-        before = {k: deepcopy(v) for k, v in note.items() if k != "raw"}
+        before = note_view(note)
         if op == "MOVE_NOTE_TIME":
             new = _beat(payload.get("new_start_beat"))
             if abs(new - b) > Fraction(1, 8) or not left <= new <= right or not left <= end + new - b <= right:
@@ -180,7 +188,7 @@ def apply_operations(chart, conditions, operations, window):
             note["end_beat"] = beat_triplet(new)
         else:
             ir["notes"].remove(note)
-        changes.append({"op": op, "target_id": target_id, "before": before, "after": None if op == "REMOVE_NOTE" else {k: deepcopy(v) for k, v in note.items() if k != "raw"}})
+        changes.append({"op": op, "target_id": target_id, "before": before, "after": None if op == "REMOVE_NOTE" else note_view(note)})
     result = ir_to_chart(ir)
     if noise_snapshot(result) != noise_snapshot(chart):
         raise ValueError("噪域只读保护阻止修改")

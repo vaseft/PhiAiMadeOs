@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "pamos-workbench": {
+      "command": "E:\\PhiAiMade\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "phiaimadeos.workbench_mcp"],
+      "env": {"PAMOS_ROOT": "E:\\PhiAiMade", "PYTHONUTF8": "1"}
+    }
+  }
+}

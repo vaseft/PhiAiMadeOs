@@ -1,0 +1,12 @@
+{
+  "protocol": "rpen-mod",
+  "api": 1,
+  "id": "pamos-local-bridge",
+  "name": "PAMOs 本地审批桥接",
+  "version": "0.1.0-alpha.1",
+  "author": "PhiAiMadeOs contributors",
+  "description": "用户输入一次性配对码后向本机 PAMOs 发送当前谱面快照，只接受同快照人工批准的修订。提交调用公开 commit/save，保存失败不会显示成功。尚未进行编辑器实机验收。",
+  "entry": "index.mjs",
+  "dependencies": [],
+  "conflicts": []
+}

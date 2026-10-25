@@ -1,0 +1,15 @@
+{
+  "observed_on": "2026-10-24",
+  "phira_pro_windows": {
+    "repository": "Phira-Pro/Phira-Pro",
+    "tag": "v0.8.2-pro.16",
+    "release_commit_short": "b67e5e8",
+    "asset": "PhiraPro-v0.8.2-pro.16-win64.zip",
+    "url": "https://github.com/Phira-Pro/Phira-Pro/releases/download/v0.8.2-pro.16/PhiraPro-v0.8.2-pro.16-win64.zip",
+    "sha256": "f503ae9deab7bfc19fc39d1036a0eadc67e7bbc495e0071e51592a47441a1cd0",
+    "published_on": "2026-10-20",
+    "purpose": "Local client prepared for later human import/playability acceptance",
+    "acceptance": "NOT RUN",
+    "warning": "This published binary differs from the source-reference commit in upstreams.lock.json; neither commit pin nor download proves interoperability. Do not silently replace the source contract or label either version tested."
+  }
+}

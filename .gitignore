@@ -5,6 +5,7 @@
 /audio/
 /raw_charts/
 /chart_assets/
+/官方谱面/
 /checkpoints/
 /runs/
 /training_cache/
@@ -14,7 +15,11 @@
 *.flac
 *.ogg
 *.wav
+*.m4a
+*.aac
+*.opus
 *.pez
+*.rpenmod
 *.zip
 *.pt
 *.pth
@@ -35,6 +40,7 @@
 venv/
 __pycache__/
 *.py[cod]
+*.egg-info/
 .pytest_cache/
 # Frontend
 node_modules/

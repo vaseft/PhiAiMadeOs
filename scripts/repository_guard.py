@@ -14,13 +14,13 @@ REQUIRED = (
 )
 BLOCKED_DIRS = (
     "datasets/", "data/", "media/", "audio/", "raw_charts/", "chart_assets/",
-    "checkpoints/", "runs/", "training_cache/", "model_registry/",
+    "checkpoints/", "runs/", "training_cache/", "model_registry/", "官方谱面/",
     "models/registry/", "node_modules/", ".venv/", "venv/",
     ".pamos/", ".pamos_state/",
     ".tools/", ".runtime/", ".cache/", ".downloads/", ".local/",
 )
 BLOCKED_EXTENSIONS = {
-    ".mp3", ".flac", ".ogg", ".wav", ".pez", ".pt", ".pth", ".ckpt",
+    ".mp3", ".flac", ".ogg", ".wav", ".m4a", ".aac", ".opus", ".pez", ".rpenmod", ".pt", ".pth", ".ckpt",
     ".safetensors", ".onnx", ".sqlite", ".sqlite3", ".db", ".pem", ".key",
 }
 MAX_TRACKED_BYTES = 5 * 1024 * 1024  # Regular source files only; large binaries require review.
@@ -56,6 +56,8 @@ def validate() -> list[str]:
             continue
         if any(lower.startswith(prefix) for prefix in BLOCKED_DIRS):
             errors.append(f"Private data or generated directory tracked: {path}")
+        if any(name in {"node_modules", "dist", ".venv", ".tools", ".runtime", ".cache", ".local"} for name in parts):
+            errors.append(f"Nested generated or machine-local directory tracked: {path}")
         if "__pycache__" in parts or lower.endswith(".pyc"):
             errors.append(f"Compiled Python file tracked: {path}")
         if any(name == ".env" or name.startswith(".env.") and name != ".env.example" for name in parts):

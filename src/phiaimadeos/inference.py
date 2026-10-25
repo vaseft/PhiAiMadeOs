@@ -207,7 +207,13 @@ def _chart_from_predictions(notes, events, parents, bpm, duration, conditions, f
     exported = [{"id": n["id"], "kind": KINDS[n["kind"]], "time_s": n["time"], "end_time_s": n["end"],
                  "line_id": f"line_{n['line']}", "x": n["x"], "above": n["above"] + 1,
                  "lane_index": n.get("lane")} for n in notes]
-    chart = formats.make_chart(exported, bpm, duration, conditions)
+    _assert_generation_no_noise(conditions)
+    # Keep request-level capability metadata outside chart noise mechanism
+    # keys. The complete request and its SHA remain in the candidate record.
+    chart_conditions = {key: value for key, value in conditions.items() if key != "noise_area"}
+    chart = formats.make_chart(exported, bpm, duration, chart_conditions)
+    if "noise_area" in conditions:
+        chart["pamos"]["noise_generation_enabled"] = False
     if conditions["chart_mode"] != "pure_keys":
         template = copy.deepcopy(chart["judgeLineList"][0])
         template["notes"] = []

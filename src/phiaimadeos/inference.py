@@ -240,10 +240,22 @@ def _chart_from_predictions(notes, events, parents, bpm, duration, conditions, f
     return chart
 
 
+def _assert_generation_no_noise(conditions):
+    # The public generation contract carries an explicit disabled capability,
+    # not chart noise data. Keep the generic training/raw-data guard strict.
+    guarded = dict(conditions)
+    if "noise_area" in guarded:
+        declaration = guarded.pop("noise_area")
+        if (type(declaration) is not dict or set(declaration) != {"generation_enabled"}
+                or declaration["generation_enabled"] is not False):
+            raise ModelError("NOISE_TRAINING_FORBIDDEN", "学习式生成只允许明确关闭噪域，不能附带噪域数据。")
+    assert_no_noise(guarded)
+
+
 def generate_learned(analysis: dict, conditions: dict, bundle: dict, project_root, progress=None) -> dict:
     root = Path(project_root).resolve()
     condition_values = encode_conditions(conditions)
-    assert_no_noise(conditions)
+    _assert_generation_no_noise(conditions)
     verified = _verify_bundle(bundle, conditions, analysis, root)
     feature_path = _resolve_analysis_path(root, analysis.get("feature_path"))
     features = load_features(feature_path)
